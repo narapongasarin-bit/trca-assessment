@@ -22,6 +22,8 @@ var SHEET_RAW    = 'Raw';              // หมายเลขตัวเล�
 var SHEET_SCORED = 'TRCA_Data';        // คะแนน โครงสร้างเดียวกับไฟล์ข้อมูลจำลอง
 var SHEET_PERSON = 'Person_Info';      // ข้อมูลทั่วไปและสรุปข้อมูลขาดหาย
 var SHEET_CONFLICT = 'Conflicts';      // กรณีรหัสซ้ำข้ามคน เก็บไว้ตรวจสอบ ไม่เขียนทับของเดิม
+var SHEET_RESULTS   = 'Results';       // ผลวิเคราะห์รายบุคคล ผู้วิจัยกรอกเองหลังวิเคราะห์ด้วย ConQuest เสร็จ
+var SHEET_CONFIG    = 'Config';        // สวิตช์ ResultsPublished คุมว่าจะให้ครูตรวจผลได้หรือยัง
 
 function itemCodes_() {
   var c = [];
@@ -37,6 +39,14 @@ function setupSheets() {
   ensure_(ss, SHEET_SCORED, ['ID'].concat(codes));
   ensure_(ss, SHEET_RAW,    ['ID', 'session', 'submittedAt', 'durationSec', 'appVersion'].concat(codes));
   ensure_(ss, SHEET_CONFLICT, ['ID', 'session', 'submittedAt', 'note'].concat(codes));
+  ensure_(ss, SHEET_RESULTS, ['ID', 'Theta_K', 'SE_K', 'T_K', 'Level_K',
+                              'Theta_S', 'SE_S', 'T_S', 'Level_S',
+                              'Theta_A', 'SE_A', 'T_A', 'Level_A', 'Note']);
+  var cfg = ensure_(ss, SHEET_CONFIG, ['Key', 'Value', 'หมายเหตุ']);
+  if (cfg.getLastRow() < 2) {
+    cfg.appendRow(['ResultsPublished', 'FALSE',
+      'เปลี่ยนเป็น TRUE เมื่อวิเคราะห์และกรอกชีต Results ครบแล้ว จึงจะให้ครูตรวจผลได้']);
+  }
   ensure_(ss, SHEET_PERSON, ['ID', 'submittedAt', 'consent', 'sex', 'vt', 'yrs', 'sz', 'grade', 'ex',
                              'S_Status', 'S_NA_Count', 'A_NA_Count', 'A_NA_Pct', 'A_Over10', 'durationSec']);
 }
@@ -60,8 +70,11 @@ function doPost(e) {
     if (!p.id) return json_({ ok: false, error: 'ไม่มีรหัสผู้ตอบ' });
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var codes = itemCodes_();
     setupSheets();
+
+    if (p.action === 'checkResult') return handleCheckResult_(ss, p.id);
+
+    var codes = itemCodes_();
 
     // กันการเขียนทับข้ามคน: รหัสเดิมจะถูกเขียนทับได้เฉพาะเมื่อมาจากรอบการตอบเดียวกัน
     var shRaw = ss.getSheetByName(SHEET_RAW);
@@ -131,4 +144,28 @@ function doGet() {
 
 function json_(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function isPublished_(ss) {
+  var sh = ss.getSheetByName(SHEET_CONFIG);
+  if (!sh || sh.getLastRow() < 2) return false;
+  var rows = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues();
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i][0] === 'ResultsPublished') return String(rows[i][1]).toUpperCase() === 'TRUE';
+  }
+  return false;
+}
+
+function handleCheckResult_(ss, id) {
+  var published = isPublished_(ss);
+  if (!published) return json_({ ok: true, published: false });
+
+  var sh = ss.getSheetByName(SHEET_RESULTS);
+  var found = findRow_(sh, id);
+  if (found.row === 0) return json_({ ok: true, published: true, found: false });
+
+  var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  var data = {};
+  head.forEach(function (h, i) { data[h] = found.values[i]; });
+  return json_({ ok: true, published: true, found: true, data: data });
 }
