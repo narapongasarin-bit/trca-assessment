@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TRCA — แปลงข้อมูลสำหรับ ACER ConQuest 2.0</title>
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  main{max-width:960px;padding-bottom:40px}
+  textarea{width:100%;min-height:150px;font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:13px;border:1.5px solid var(--line);border-radius:10px;padding:10px;
+    background:var(--card);color:var(--ink)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+  .row button{flex:0 0 auto;padding:12px 16px;border-radius:10px;border:1.5px solid var(--k);
+    background:var(--k);color:#fff;font:inherit;font-weight:700;cursor:pointer}
+  .row button.ghost{background:transparent;color:var(--k)}
+  .row button:disabled{opacity:.45;cursor:not-allowed}
+  pre{background:var(--sel);padding:12px;border-radius:10px;overflow:auto;font-size:13px;
+    max-height:320px;color:var(--ink)}
+  .bad{color:#B5473A;font-weight:700}
+  .good{color:#1C7A5E;font-weight:700}
+</style>
+</head>
+<body>
+<header><div class="bar"><span class="t">TRCA — แปลงข้อมูลสำหรับ ACER ConQuest 2.0</span></div></header>
+<main>
+
+<div class="card">
+  <h2>ขั้นที่ 1 วางข้อมูลคะแนน</h2>
+  <p class="muted">คัดลอกจากชีต <code>TRCA_Data</code> ของ Google Sheet ทั้งแผ่นรวมหัวตาราง แล้ววางในช่องด้านล่าง
+     รองรับทั้งข้อมูลคั่นด้วยจุลภาคและคั่นด้วยแท็บ ช่องว่างคือข้อมูลขาดหาย</p>
+  <textarea id="scored" placeholder="ID,K01,K02,...,A20&#10;TR001,1,0,..."></textarea>
+
+  <h2 style="margin-top:18px">ขั้นที่ 2 วางข้อมูลทั่วไป (ไม่บังคับ)</h2>
+  <p class="muted">คัดลอกจากชีต <code>Person_Info</code> ใช้เติมคอลัมน์ 8–10 ของแฟ้ม .dat
+     คือวิทยฐานะ ขนาดโรงเรียน และประสบการณ์วิจัย หากไม่วาง ระบบจะใส่จุดแทน</p>
+  <textarea id="person" placeholder="ID,submittedAt,consent,sex,vt,yrs,sz,grade,ex,..."></textarea>
+
+  <div class="row">
+    <button id="go">ตรวจข้อมูลและสร้างแฟ้ม</button>
+    <button id="dat" class="ghost" disabled>ดาวน์โหลด trca.dat</button>
+    <button id="lab" class="ghost" disabled>ดาวน์โหลดแฟ้ม .lab ทั้งชุด</button>
+    <button id="cqc" class="ghost" disabled>ดาวน์โหลดแฟ้มคำสั่ง .cqc</button>
+  </div>
+</div>
+
+<div class="card hide" id="rep">
+  <h2>รายงานตรวจคุณภาพข้อมูล</h2>
+  <div id="repbody"></div>
+</div>
+
+<div class="card hide" id="prev">
+  <h2>ตัวอย่างแฟ้ม trca.dat สิบบรรทัดแรก</h2>
+  <p class="muted">ทุกบรรทัดต้องกว้าง 79 อักขระเท่ากัน ใช้ <code>.</code> แทนข้อมูลขาดหาย</p>
+  <pre id="prevbody"></pre>
+</div>
+
+</main>
+<script>
+const K=[],S=[],A=[];
+for(let i=1;i<=28;i++)K.push('K'+String(i).padStart(2,'0'));
+for(let i=1;i<=20;i++)S.push('S'+String(i).padStart(2,'0'));
+for(let i=1;i<=20;i++)A.push('A'+String(i).padStart(2,'0'));
+const ALL=[...K,...S,...A], MISS='.';
+let DAT='',LABS=null;
+
+const $=s=>document.querySelector(s);
+function parse(txt){
+  const t=txt.trim(); if(!t)return null;
+  const sep=t.split('\n')[0].includes('\t')?'\t':',';
+  const rows=t.split(/\r?\n/).map(l=>l.split(sep).map(c=>c.trim()));
+  const head=rows.shift();
+  return rows.filter(r=>r.some(c=>c!=='')).map(r=>Object.fromEntries(head.map((h,i)=>[h,r[i]??''])));
+}
+function dl(name,text){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));
+  a.download=name;a.click();URL.revokeObjectURL(a.href);
+}
+
+$('#go').onclick=()=>{
+  const rows=parse($('#scored').value);
+  if(!rows){alert('กรุณาวางข้อมูลคะแนนก่อน');return;}
+  const miss=ALL.filter(c=>!(c in rows[0]));
+  const out=[],warn=[],info=[];
+  if(miss.length){warn.push(`ไม่พบคอลัมน์ ${miss.length} คอลัมน์ ได้แก่ ${miss.slice(0,8).join(', ')}${miss.length>8?' …':''}`);}
+
+  const per=parse($('#person').value);
+  const pmap={}; if(per)per.forEach(p=>{pmap[p.ID]={vt:p.vt,sz:p.sz,ex:p.ex};});
+
+  // ---------- ตรวจคุณภาพ ----------
+  const naItem={},cat={},bad=[];
+  ALL.forEach(c=>{naItem[c]=0;cat[c]={};});
+  let overA=0;
+  rows.forEach(r=>{
+    let naA=0;
+    ALL.forEach(c=>{
+      const v=(r[c]??'').toString().trim();
+      if(v===''){naItem[c]++; if(c[0]==='A')naA++;}
+      else{
+        const n=Number(v);
+        const maxv=c[0]==='K'?1:3;
+        if(!Number.isInteger(n)||n<0||n>maxv)bad.push(`${r.ID}:${c}=${v}`);
+        cat[c][v]=(cat[c][v]||0)+1;
+      }
+    });
+    if(naA/20>0.10)overA++;
+  });
+  const N=rows.length;
+  info.push(`จำนวนผู้ตอบ <b>${N}</b> คน  จำนวนข้อ <b>${ALL.length}</b> ข้อ`);
+  const naK=K.reduce((s,c)=>s+naItem[c],0),naS=S.reduce((s,c)=>s+naItem[c],0),naA2=A.reduce((s,c)=>s+naItem[c],0);
+  info.push(`ข้อมูลขาดหาย: มิติ K <b>${naK}</b> ช่อง  มิติ S <b>${naS}</b> ช่อง  มิติ A <b>${naA2}</b> ช่อง (${(100*naA2/(N*20)).toFixed(1)}%)`);
+  const neverS=rows.filter(r=>S.every(c=>(r[c]??'')==='')).length;
+  info.push(`ครูที่ข้ามตอนที่ 2 ทั้งตอน <b>${neverS}</b> คน  คิดเป็น ${(100*neverS/N).toFixed(1)}%`);
+  if(naK>0)warn.push(`มิติ K มีข้อมูลขาดหาย ${naK} ช่อง ซึ่งไม่ควรเกิดขึ้นเพราะทุกคนต้องตอบครบ`);
+  if(overA>0)warn.push(`ผู้ตอบ <b>${overA}</b> คน (${(100*overA/N).toFixed(1)}%) มีข้อมูลขาดหายในมิติ A เกินร้อยละ 10 — ACER ConQuest 2.0 อาจประมาณค่าความสามารถของกลุ่มนี้ไม่ได้`);
+  if(bad.length)warn.push(`พบค่าผิดช่วง ${bad.length} ช่อง เช่น ${bad.slice(0,5).join(', ')}`);
+
+  // ข้อที่มีบางระดับคะแนนน้อยเกินไป
+  const thin=[];
+  ALL.forEach(c=>{
+    const maxv=c[0]==='K'?1:3;
+    for(let k=0;k<=maxv;k++){const n=cat[c][String(k)]||0; if(n<3)thin.push(`${c} ระดับ ${k} มี ${n} คน`);}
+  });
+  if(thin.length)warn.push(`ข้อที่มีผู้ตอบบางระดับน้อยกว่า 3 คน ซึ่งอาจประมาณค่าขีดจำกัดไม่ได้: ${thin.slice(0,10).join(' · ')}${thin.length>10?' …':''}`);
+  const hiNA=A.filter(c=>naItem[c]/N>0.10).map(c=>`${c} ${(100*naItem[c]/N).toFixed(0)}%`);
+  if(hiNA.length)warn.push(`ข้อในมิติ A ที่มีอัตราเลือก “ยังไม่เคยเจอสถานการณ์นี้” เกินร้อยละ 10: ${hiNA.join(' · ')} — ควรทบทวนสถานการณ์ของข้อเหล่านี้`);
+
+  // ---------- สร้างแฟ้ม .dat ----------
+  const lines=rows.map(r=>{
+    const id=String(r.ID??'').padEnd(6,' ').slice(0,6);
+    const d=pmap[r.ID]||{};
+    const f=v=>{const s=String(v??'').trim();return s.length===1?s:MISS;};
+    let L=id+' '+f(d.vt)+f(d.sz)+f(d.ex)+' ';
+    ALL.forEach(c=>{const v=(r[c]??'').toString().trim();L+=(v===''?MISS:v);});
+    return L;
+  });
+  const widths=new Set(lines.map(l=>l.length));
+  if(widths.size!==1||!widths.has(79))warn.push(`ความกว้างบรรทัดไม่คงที่หรือไม่เท่ากับ 79 อักขระ พบ ${[...widths].join(', ')}`);
+  DAT=lines.join('\n')+'\n';
+
+  LABS={
+    'trca_K.lab':'===> item\n'+K.map((c,i)=>`${i+1} ${c}_DOK${(i%4)+1}`).join('\n')+'\n',
+    'trca_S.lab':'===> item\n'+S.map((c,i)=>`${i+1} ${c}`).join('\n')+'\n',
+    'trca_A.lab':'===> item\n'+A.map((c,i)=>`${i+1} ${c}`).join('\n')+'\n',
+    'trca_all.lab':'===> item\n'+ALL.map((c,i)=>`${i+1} ${c}`).join('\n')+'\n'
+  };
+
+  $('#repbody').innerHTML =
+    '<p>'+info.join('<br>')+'</p>'+
+    (warn.length
+      ? '<h3 class="bad">ประเด็นที่ต้องตรวจก่อนวิเคราะห์</h3><ul>'+warn.map(w=>'<li>'+w+'</li>').join('')+'</ul>'
+      : '<p class="good">ผ่านการตรวจเบื้องต้นทุกรายการ</p>');
+  $('#rep').classList.remove('hide');
+  $('#prevbody').textContent=lines.slice(0,10).join('\n');
+  $('#prev').classList.remove('hide');
+  ['dat','lab','cqc'].forEach(id=>$('#'+id).disabled=false);
+};
+
+$('#dat').onclick=()=>dl('trca.dat',DAT);
+$('#lab').onclick=()=>Object.entries(LABS).forEach(([n,t])=>dl(n,t));
+$('#cqc').onclick=()=>dl('trca_K_uni.cqc',
+`Title TRCA: Dimension K, Dichotomous Rasch;
+Datafile trca.dat;
+Format id 1-6 vt 8 sz 9 ex 10 responses 12-39;
+Codes 0,1;
+Labels << trca_K.lab;
+Model item;
+Set constraints=cases;
+Estimate ! method=gauss, nodes=30, converge=0.0001, iterations=2000;
+Show ! estimates=latent, tables=1:2:3:4 >> K_uni.shw;
+Show cases ! estimates=eap >> K_uni.eap;
+Itanal >> K_uni.itn;
+Export parameters >> K_uni.prm;
+`);
+</script>
+</body>
+</html>
