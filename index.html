@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>แบบประเมินสมรรถนะการวิจัยของครู (TRCA)</title>
+<meta name="description" content="แบบประเมินสมรรถนะการวิจัยของครู 3 มิติ พัฒนาด้วยแผนที่โครงสร้างและการวัดแบบราสช์">
+<link rel="stylesheet" href="css/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<script>
+  // ---------- ตั้งค่าระบบ ----------
+  // นำ URL ของ Google Apps Script Web App มาวางใน endpoint
+  // หากเว้นว่างไว้ ระบบจะทำงานแบบออฟไลน์และให้ผู้ตอบบันทึกเป็นไฟล์แทน
+  window.TRCA_CONFIG = {
+    endpoint: 'https://script.googleusercontent.com/macros/echo?user_content_key=AUkAhnTgjgBrnf4HlEjRxKPyt4VC7F_0V233aAacOPPpT5vIoGFkbLYMBZMlA4qzQX4jf2cb97Jx1zBTlss-2I_LQ9wBb4eqKj77nwr4lSaqKDReEoZvRLgAj1ad-bx9vC3nkGh4vpWa5nJlZuJQSMA4TulYEEneGGwnv3mLt6Aj0AkjY-XMUNFxcwir6IWrAUkjynNZdYpiXAKtRxZMxne8Gg81i5156H68lCXO0Ekv6E6VXzxpQikbVN7YhygqfP6kxJ-HcOSxNQn60_UJIr8VOok9VFJYWw&lib=MnROCv4nRoDBQqvRCCHEJrDdlXGvfjwig'
+  };
+</script>
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <span class="t" id="ptitle">แบบประเมินสมรรถนะการวิจัยของครู</span>
+    <span class="c" id="pcount"></span>
+  </div>
+  <div class="prog"><i id="pbar" style="width:0%"></i></div>
+</header>
+
+<main id="main"></main>
+<div class="actions"><div id="actions"></div></div>
+
+<noscript>
+  <div style="padding:24px">ระบบนี้ต้องเปิดใช้งาน JavaScript จึงจะทำงานได้ กรุณาเปิดใช้งานแล้วโหลดหน้านี้ใหม่</div>
+</noscript>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
