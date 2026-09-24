@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ตรวจสอบผลการประเมิน — TRCA</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  .lv{display:flex;gap:14px;align-items:flex-start;padding:16px;border:1.5px solid var(--line);
+    border-radius:12px;margin-bottom:12px}
+  .lv .num{flex:0 0 44px;height:44px;border-radius:50%;display:grid;place-items:center;
+    font-size:19px;font-weight:700;color:#fff}
+  .lv .body h4{margin:0 0 4px;font-size:16px}
+  .lv .body p{margin:0;font-size:14px;color:var(--ink2)}
+  .tbar{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin:6px 0 2px}
+  .tbar>i{display:block;height:100%}
+  .tsc{font-size:13px;color:var(--ink3)}
+</style>
+<script>window.TRCA_CONFIG = { endpoint: '' };</script>
+</head>
+<body>
+<header><div class="bar"><span class="t">ตรวจสอบผลการประเมิน</span></div></header>
+<main id="main" style="max-width:720px;margin:0 auto;padding:18px 16px 100px"></main>
+<div class="actions"><div id="actions"></div></div>
+
+<script>
+const ENDPOINT = window.TRCA_CONFIG.endpoint || '';
+const $ = s => document.querySelector(s);
+const el = (t,c,x) => { const e=document.createElement(t); if(c)e.className=c; if(x!=null)e.innerHTML=x; return e; };
+
+const LEVELS = {
+  K: { color:'var(--k)', name:'ความรู้ในการวิจัย', items:[
+    { n:0, title:'ผู้ที่ยังไม่แสดงความรู้พื้นฐาน', d:'ยังไม่สามารถแสดงความรู้ขั้นต่ำได้ แม้ได้รับตัวอย่างหรือตัวช่วย' },
+    { n:1, title:'ผู้รับรู้มโนทัศน์พื้นฐาน', d:'ระลึก บอก ระบุ และจำแนกความรู้พื้นฐานตามรูปแบบที่คุ้นเคยได้' },
+    { n:2, title:'ผู้เข้าใจกระบวนการวิจัย', d:'อธิบายความสัมพันธ์ เปรียบเทียบ และใช้มโนทัศน์กับสถานการณ์ที่คุ้นเคยได้' },
+    { n:3, title:'นักออกแบบและวางแผนการวิจัย', d:'ใช้เหตุผล เลือก ตัดสินใจ และออกแบบการวิจัยได้อย่างเป็นระบบ' },
+    { n:4, title:'นักประเมินและประยุกต์ใช้ความรู้', d:'สังเคราะห์ ประเมิน วิพากษ์ และถ่ายโอนความรู้ไปใช้ในสถานการณ์ใหม่ได้' } ] },
+  S: { color:'var(--s)', name:'ทักษะการวิจัย', items:[
+    { n:0, title:'ผู้ที่ยังไม่สามารถปฏิบัติขั้นพื้นฐาน', d:'ยังไม่แสดงการปฏิบัติขั้นต่ำ แม้มีแบบฟอร์ม ตัวอย่าง และการช่วยเหลือใกล้ชิด' },
+    { n:1, title:'ผู้ปฏิบัติตามแบบอย่าง', d:'ปฏิบัติตามกฎหรือแบบฟอร์มทีละขั้นอย่างเคร่งครัด ต้องมีผู้กำกับตลอด' },
+    { n:2, title:'ผู้ปฏิบัติจากประสบการณ์', d:'ปฏิบัติได้เมื่อสถานการณ์คล้ายที่เคยพบ แต่ยังจัดลำดับความสำคัญไม่ได้เมื่อเงื่อนไขเปลี่ยน' },
+    { n:3, title:'ผู้ปฏิบัติได้ด้วยตนเอง', d:'วางแผนครบวงจรเอง จัดลำดับความสำคัญ ให้เหตุผลของการตัดสินใจ และรับผิดชอบผล' },
+    { n:4, title:'ผู้ชำนาญและนำผู้อื่น', d:'มองสถานการณ์เป็นภาพรวม ปรับได้ทันทีเมื่อหน้างานเปลี่ยน และขยายผลสู่ผู้อื่น' } ] },
+  A: { color:'var(--a)', name:'คุณลักษณะ', items:[
+    { n:0, title:'ผู้ยังไม่ตระหนักและไม่ตอบสนอง', d:'ยังไม่ปรากฏการรับรู้หรือการตอบสนองขั้นต่ำต่อคุณค่าของการวิจัย' },
+    { n:1, title:'ผู้ตระหนักรู้และตอบสนอง', d:'สนใจ ตั้งคำถาม และปฏิบัติตามหลักพื้นฐานเมื่อมีผู้กำกับ' },
+    { n:2, title:'ผู้เห็นคุณค่าและรับผิดชอบ', d:'ยึดถือคุณค่าและเลือกทำเองแม้ไม่มีผู้กำหนด ยอมลงแรงเพิ่ม' },
+    { n:3, title:'ผู้จัดระบบคุณค่าและกำกับตนเอง', d:'จัดลำดับคุณค่าที่ขัดกันได้อย่างมีเหตุผล และรับผิดชอบต่อคุณภาพงานโดยไม่ต้องมีผู้ติดตาม' },
+    { n:4, title:'ผู้นำทางจริยธรรมและการเรียนรู้', d:'คุณค่าเป็นลักษณะประจำที่คงเส้นคงวาข้ามสถานการณ์ และแผ่ไปสู่ผู้อื่น' } ] }
+};
+
+function screenIntro() {
+  const main = $('#main'); main.innerHTML = '';
+  const banner = el('div','banner',`
+    <div class="bicon">🔎</div>
+    <h1 style="font-size:20px">ตรวจสอบผลการประเมิน</h1>
+    <p class="sub">กรอกรหัสอ้างอิงที่ท่านได้รับหลังตอบแบบประเมิน</p>`);
+  main.appendChild(banner);
+
+  const c = el('div','card');
+  c.appendChild(el('label','f','รหัสอ้างอิง 6 หลัก'));
+  const inp = document.createElement('input'); inp.type='text'; inp.maxLength=6;
+  inp.style.textTransform='uppercase'; inp.style.fontSize='20px'; inp.style.letterSpacing='2px';
+  inp.style.textAlign='center'; inp.placeholder='เช่น TABC12';
+  const q = new URLSearchParams(location.search).get('id');
+  if (q) inp.value = q.toUpperCase().slice(0,6);
+  c.appendChild(inp);
+  const err = el('p','note hide'); c.appendChild(err);
+  main.appendChild(c);
+
+  const box = el('div','in');
+  const btn = el('button','btn wide','ตรวจสอบผล');
+  btn.onclick = () => lookup(inp.value.trim().toUpperCase(), err, btn);
+  box.appendChild(btn);
+  $('#actions').innerHTML=''; $('#actions').appendChild(box);
+  inp.focus();
+}
+
+async function lookup(id, err, btn) {
+  err.classList.add('hide');
+  if (!/^[A-Z0-9]{6}$/.test(id)) { err.textContent='กรุณากรอกรหัส 6 หลักให้ถูกต้อง'; err.classList.remove('hide'); return; }
+  if (!ENDPOINT) { err.textContent='หน้านี้ยังไม่ได้เชื่อมต่อปลายทางข้อมูล — เวอร์ชันเผยแพร่จริงต้องตั้งค่า endpoint ก่อน'; err.classList.remove('hide'); return; }
+  btn.disabled = true; btn.textContent = 'กำลังตรวจสอบ…';
+  try {
+    const r = await fetch(ENDPOINT, { method:'POST', redirect:'follow',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'checkResult', id }) });
+    const j = await r.json();
+    if (!j.ok) { err.textContent = j.error || 'เกิดข้อผิดพลาด'; err.classList.remove('hide'); btn.disabled=false; btn.textContent='ตรวจสอบผล'; return; }
+    if (!j.published) { showNotReady(); return; }
+    if (!j.found) { showNotFound(); return; }
+    showResult(j.data);
+  } catch (e) {
+    err.textContent = 'เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่'; err.classList.remove('hide');
+    btn.disabled=false; btn.textContent='ตรวจสอบผล';
+  }
+}
+
+function showNotReady() {
+  const main = $('#main'); main.innerHTML='';
+  const c = el('div','card');
+  c.appendChild(el('h2',null,'ยังไม่เปิดให้ตรวจสอบผล'));
+  c.appendChild(el('p',null,'ผู้วิจัยกำลังเก็บข้อมูลและวิเคราะห์ผลอยู่ กรุณากลับมาตรวจสอบอีกครั้งภายหลัง'));
+  main.appendChild(c);
+  $('#actions').innerHTML=''; const b=el('button','btn ghost','กลับไปกรอกรหัสใหม่'); b.onclick=screenIntro; $('#actions').appendChild(b);
+}
+function showNotFound() {
+  const main = $('#main'); main.innerHTML='';
+  const c = el('div','card');
+  c.appendChild(el('h2',null,'ไม่พบรหัสนี้ในระบบ'));
+  c.appendChild(el('p',null,'กรุณาตรวจสอบว่าพิมพ์รหัสถูกต้อง หรือท่านอาจยังไม่ได้ส่งแบบประเมิน'));
+  main.appendChild(c);
+  $('#actions').innerHTML=''; const b=el('button','btn ghost','ลองใหม่'); b.onclick=screenIntro; $('#actions').appendChild(b);
+}
+
+function showResult(d) {
+  const main = $('#main'); main.innerHTML='';
+  const banner = el('div','banner',`
+    <div class="bicon">📊</div>
+    <h1 style="font-size:20px">ผลการประเมินของท่าน</h1>
+    <p class="sub">รหัสอ้างอิง ${d.id}</p>`);
+  main.appendChild(banner);
+
+  ['K','S','A'].forEach(dim => {
+    const L = LEVELS[dim]; const lv = d['Level_'+dim]; const t = d['T_'+dim];
+    if (lv == null || lv === '') return;
+    const item = L.items.find(x => x.n === Number(lv)) || L.items[0];
+    const c = el('div','card');
+    c.appendChild(el('span','tag',L.name));
+    if (t != null && t !== '') {
+      c.appendChild(el('p','tsc', `คะแนนมาตรฐาน T = ${t}`));
+      const pct = Math.max(0, Math.min(100, (Number(t)-20)/60*100));
+      const bar = el('div','tbar'); const i=document.createElement('i');
+      i.style.width=pct+'%'; i.style.background=L.color; bar.appendChild(i); c.appendChild(bar);
+    }
+    const box = el('div','lv'); box.style.marginTop='14px';
+    const num = el('div','num', String(item.n)); num.style.background = L.color;
+    box.appendChild(num);
+    const body = el('div','body', `<h4>ระดับ ${item.n}  ${item.title}</h4><p>${item.d}</p>`);
+    box.appendChild(body);
+    c.appendChild(box);
+    main.appendChild(c);
+  });
+
+  const note = el('div','card');
+  note.innerHTML = `<p class="muted">ผลนี้เป็นระดับสมรรถนะที่ประมาณจากคำตอบของท่านร่วมกับผู้ตอบท่านอื่นทั้งหมด
+    โดยใช้แบบจำลองการวัดของราสช์ ค่าที่ได้ใช้เพื่อการพัฒนาตนเองและการวางแผนของเขตพื้นที่การศึกษาเท่านั้น
+    มิได้มีผลต่อการประเมินวิทยฐานะหรือการปฏิบัติงานของท่านแต่อย่างใด</p>`;
+  main.appendChild(note);
+
+  $('#actions').innerHTML='';
+  const b = el('button','btn ghost','ตรวจสอบรหัสอื่น'); b.onclick = screenIntro;
+  $('#actions').appendChild(b);
+}
+
+screenIntro();
+</script>
+</body>
+</html>
