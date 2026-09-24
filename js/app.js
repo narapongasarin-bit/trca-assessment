@@ -295,11 +295,37 @@ async function doSubmit() {
 function vDone(_s, main) {
   const c = el('div', 'card');
   if (S.submitted) {
-    c.appendChild(el('h2', null, 'ส่งแบบประเมินเรียบร้อยแล้ว'));
-    const b = el('div', 'okbox');
-    b.innerHTML = `ขอขอบพระคุณที่สละเวลาตอบแบบประเมิน<br>รหัสอ้างอิงของท่านคือ <code>${S.id}</code>`;
-    c.appendChild(b);
-    c.appendChild(el('p', 'muted', 'ระบบไม่แสดงคะแนนรายบุคคล เนื่องจากคะแนนดิบยังไม่ผ่านการแปลงเป็นค่าความสามารถและยังตีความโดยตรงไม่ได้'));
+    const banner = el('div', 'banner');
+    banner.innerHTML = `
+      <div class="bicon">✅</div>
+      <h1 style="font-size:20px">ส่งแบบประเมินเรียบร้อยแล้ว</h1>
+      <p class="sub">ขอขอบพระคุณที่ท่านสละเวลาตอบแบบประเมิน</p>`;
+    main.appendChild(banner);
+
+    const idbox = el('div', 'okbox');
+    idbox.innerHTML = `รหัสอ้างอิงของท่านคือ<br><code style="font-size:20px">${S.id}</code>
+      <p class="muted" style="margin:8px 0 0">โปรดจดหรือถ่ายภาพหน้านี้ไว้ ใช้ตรวจสอบผลได้ภายหลัง</p>`;
+    c.appendChild(idbox);
+
+    c.appendChild(el('h3', null, 'สรุปสิ่งที่ท่านทำวันนี้'));
+    const g = el('div', 'grid'); g.style.gridTemplateColumns = 'repeat(3,1fr)';
+    ['K', 'S', 'A'].forEach(dim => {
+      const sec = SECTIONS.find(x => x.dim === dim);
+      const done = dim === 'S' && S.neverResearched ? 0 : CODES[dim].filter(x => S.answers[x] != null).length;
+      const total = dim === 'S' && S.neverResearched ? 0 : sec.n;
+      const cell = el('div');
+      cell.style.cssText = 'text-align:center;padding:14px 6px;border:1.5px solid var(--line);border-radius:10px';
+      cell.innerHTML = `<div style="font-size:13px;color:var(--ink3);margin-bottom:4px">${sec.title.replace(/^ตอนที่ \d+\s+/, '')}</div>
+        <div style="font-size:22px;font-weight:700;color:var(--accent)">${dim === 'S' && S.neverResearched ? 'ข้าม' : done + '/' + total}</div>`;
+      g.appendChild(cell);
+    });
+    c.appendChild(g);
+
+    const note = el('div', 'note'); note.style.marginTop = '16px';
+    note.innerHTML = `<b>เหตุใดจึงยังไม่แสดงคะแนน</b><br>
+      คำตอบของท่านต้องนำไปวิเคราะห์ร่วมกับผู้ตอบท่านอื่นทั้งหมดก่อน จึงจะแปลงเป็นระดับสมรรถนะที่ถูกต้องได้
+      เมื่อเก็บข้อมูลครบและวิเคราะห์เสร็จ ท่านสามารถกลับมาตรวจสอบผลของตนเองได้ด้วยรหัสอ้างอิงข้างต้น`;
+    c.appendChild(note);
   } else {
     c.appendChild(el('h2', null, 'ยังส่งข้อมูลไม่สำเร็จ'));
     const n = el('div', 'note');
@@ -315,6 +341,10 @@ function vDone(_s, main) {
     const retry = el('button', 'btn', 'ลองส่งใหม่');
     retry.onclick = () => { pos = flow.findIndex(f => f.t === 'review'); render(); };
     box.appendChild(retry);
+  } else {
+    const chk = el('button', 'btn', 'ตรวจสอบผลภายหลัง');
+    chk.onclick = () => { location.href = `results.html?id=${encodeURIComponent(S.id)}`; };
+    box.appendChild(chk);
   }
   const dl = el('button', 'btn ghost', 'บันทึกเป็นไฟล์');
   dl.onclick = downloadBackup;
