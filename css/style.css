@@ -60,7 +60,8 @@ p{margin:0 0 12px;color:var(--ink2)}
   padding:12px 14px;font-size:15px;color:var(--ink2);margin-bottom:14px}
 .okbox{background:var(--ok);border:1px solid var(--okbd);border-radius:10px;
   padding:12px 14px;font-size:15px;color:var(--ink2)}
-.stem{font-size:18px;font-weight:600;line-height:1.55;margin:4px 0 16px}
+.stem{font-size:17.5px;font-weight:400;line-height:1.85;margin:6px 0 18px;color:var(--ink)}
+/* โจทย์เป็นความเรียงหลายบรรทัด ใช้ตัวปกติและเว้นบรรทัดกว้างขึ้นให้อ่านง่ายบนมือถือ */
 
 /* ---------- ตัวเลือก ---------- */
 .opts{display:flex;flex-direction:column;gap:10px}
@@ -157,3 +158,65 @@ code{background:var(--sel);padding:2px 6px;border-radius:5px;font-size:14px}
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]) .banner{box-shadow:0 6px 24px rgba(0,0,0,.4)}
 }
+
+/* ---------- คำชี้แจงแบบข้อสั้น ---------- */
+.note ul{margin:8px 0 0;padding-left:20px}
+.note li{margin:6px 0;line-height:1.65}
+.note li:first-child{font-weight:600}
+
+.vtag{font-size:12.5px;color:var(--ink3);text-align:center;margin:4px 0 0}
+
+/* ---------- รายการข้อควรทราบในหน้ายินยอม ---------- */
+ul.plain{margin:6px 0 12px;padding-left:20px;color:var(--ink2)}
+ul.plain li{margin:6px 0;line-height:1.65}
+
+/* ---------- หน้าเฉลยและเหตุผล ---------- */
+:root{--okfg:#1C7A5E;--badfg:#B5473A}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--okfg:#5BC49F;--badfg:#F08A7A}}
+:root[data-theme="dark"]{--okfg:#5BC49F;--badfg:#F08A7A}
+
+.tabs{display:flex;gap:8px;margin:14px 0 6px}
+button.tab{
+  flex:1;min-height:44px;padding:10px 6px;border-radius:10px;border:1.5px solid var(--line);
+  background:var(--card);font:inherit;font-weight:600;color:var(--ink2);cursor:pointer
+}
+button.tab[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+button.tab:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+details.rv{border:1.5px solid var(--line);border-radius:12px;margin:10px 0;background:var(--card)}
+details.rv>summary{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;
+  cursor:pointer;font-weight:600;list-style:none
+}
+details.rv>summary::-webkit-details-marker{display:none}
+details.rv>summary::after{content:"▾";color:var(--ink3);flex:0 0 auto}
+details.rv[open]>summary::after{content:"▴"}
+details.rv>summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:10px}
+details.rv .rvs{flex:1;text-align:right;font-size:15px}
+details.rv.ok{border-color:var(--okbd)}
+details.rv.ok .rvs{color:var(--okfg)}
+details.rv.bad .rvs{color:var(--badfg)}
+details.rv.skip .rvs{color:var(--ink3)}
+details.rv.sc .rvs{color:var(--accent)}
+.rvb{padding:2px 14px 14px}
+.rvstem{font-size:16px;line-height:1.8;margin:6px 0 12px;color:var(--ink)}
+.rvopts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.rvopts li{display:flex;gap:10px;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px}
+.rvopts li.best{border-color:var(--okbd);background:var(--ok)}
+.rvopts li.mine{box-shadow:inset 0 0 0 2px var(--selbd)}
+.rvopts .n{
+  flex:0 0 26px;height:26px;border-radius:50%;border:1.5px solid var(--line);
+  display:grid;place-items:center;font-size:13px;font-weight:700;color:var(--ink3)
+}
+.rvopts .x{flex:1;display:flex;flex-direction:column;gap:6px;line-height:1.65;font-size:15.5px}
+.tgs{display:flex;gap:6px;flex-wrap:wrap}
+.tg{font-size:12.5px;font-weight:700;padding:2px 9px;border-radius:999px}
+.tg.me{background:var(--sel);color:var(--accent);border:1px solid var(--selbd)}
+.tg.key{background:var(--ok);color:var(--okfg);border:1px solid var(--okbd)}
+.tg.sc{background:var(--bg);color:var(--ink3);border:1px solid var(--line)}
+.why{font-size:14px;color:var(--ink3);line-height:1.6}
+.rvwhy{margin:12px 0 0;padding:10px 12px;background:var(--sel);border-radius:10px;font-size:15px;color:var(--ink2);line-height:1.7}
+.dist{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}
+.dist>div{text-align:center;padding:8px 4px;border:1.5px solid var(--line);border-radius:10px;background:var(--card)}
+.dist b{display:block;font-size:18px;color:var(--accent)}
+.dist span{font-size:12.5px;color:var(--ink3)}
