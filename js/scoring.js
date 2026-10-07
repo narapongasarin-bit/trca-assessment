@@ -1,8 +1,11 @@
-// scoring.js — การให้คะแนนและการแปลงข้อมูลสำหรับ TRCA
+// scoring.js — การให้คะแนนและการแปลงข้อมูลสำหรับ TRCA (รุ่น TRCA-PROSE-20261007-R1)
 // หลักการ: ระบบเก็บ "หมายเลขตัวเลือกดิบ" เป็นค่าหลักเสมอ แล้วจึงแปลงเป็นคะแนนภายหลัง
 // ถ้าเฉลยหรือพื้นที่ผลลัพธ์เปลี่ยน จะให้คะแนนใหม่จากข้อมูลเดิมได้โดยไม่ต้องเก็บข้อมูลซ้ำ
+//
+// กติกาคำตอบ: ทุกข้อต้องตอบ 1–4 ก่อนส่ง ไม่มีตัวเลือกไม่ประสงค์ตอบในหน้าทำแบบประเมิน
+// ตัวเลือกที่ได้ 0 คะแนนเป็นคะแนนจริง ช่องว่างในแฟ้มข้อมูลมาจากแหล่งอื่น (เช่น กรอกจากแบบกระดาษ) ไม่ใช่จากระบบเว็บนี้
 
-import { ITEMS } from './items.js';
+import { ITEMS, INSTRUMENT_VERSION } from './items.js?v=3.1.0';
 
 export const MISSING = '.';        // รหัสข้อมูลขาดหายในแฟ้ม .dat ของ ConQuest
 export const BY_CODE = Object.fromEntries(ITEMS.map(i => [i.code, i]));
@@ -15,13 +18,12 @@ export const CODES = {
 /**
  * แปลงหมายเลขตัวเลือกดิบเป็นคะแนน
  * @param {string} code  รหัสข้อ เช่น K01
- * @param {number|null} raw  หมายเลขตัวเลือกที่เลือก (1–4 หรือ 1–5 สำหรับมิติ A)
- * @returns {number|null}  คะแนน หรือ null เมื่อเป็นข้อมูลขาดหาย
+ * @param {number|null} raw  หมายเลขตัวเลือกที่เลือก (1–4)
+ * @returns {number|null}  คะแนน หรือ null เมื่อไม่มีคำตอบที่ใช้ได้
  */
 export function scoreItem(code, raw) {
   const it = BY_CODE[code];
   if (!it || raw == null) return null;
-  if (it.naOption && raw === it.naOption) return null;   // A ตัวเลือกที่ 5 = ขาดหาย
   const s = it.scores[raw - 1];
   return s == null ? null : s;
 }
@@ -31,49 +33,31 @@ export function scoreRecord(rec) {
   const row = {};
   for (const dim of ['K', 'S', 'A']) {
     for (const code of CODES[dim]) {
-      if (dim === 'S' && rec.neverResearched) { row[code] = null; continue; }
       row[code] = scoreItem(code, rec.answers?.[code] ?? null);
     }
   }
   return row;
 }
 
-/** สรุปข้อมูลขาดหายรายบุคคล ใช้ตรวจเงื่อนไขร้อยละ 10 ของ ACER ConQuest 2.0 */
-export function missingSummary(rec) {
-  const row = scoreRecord(rec);
-  const naA = CODES.A.filter(c => row[c] === null).length;
-  const naS = CODES.S.filter(c => row[c] === null).length;
-  return {
-    A_NA_count: naA,
-    A_NA_pct: naA / CODES.A.length,
-    A_over10: naA / CODES.A.length > 0.10,
-    S_NA_count: naS,
-    S_status: rec.neverResearched ? 'ยังไม่เคยทำวิจัย' : 'เคยทำวิจัย'
-  };
-}
-
-/** ตรวจว่าตอบครบทุกข้อที่ต้องตอบแล้วหรือยัง คืนรายการรหัสข้อที่ยังไม่ตอบ */
+/** ตรวจว่าตอบครบแล้วหรือยัง คืนรายการรหัสข้อที่ยังไม่ตอบ */
 export function unanswered(rec, dim) {
-  if (dim === 'S' && rec.neverResearched) return [];
   return CODES[dim].filter(c => rec.answers?.[c] == null);
 }
 
-/** แถวสำหรับส่งขึ้นฐานข้อมูล เก็บทั้งค่าดิบและคะแนน */
+/** แถวสำหรับส่งขึ้นฐานข้อมูล เก็บทั้งค่าดิบและคะแนน พร้อมรุ่นเครื่องมือ */
 export function toSubmissionRow(rec) {
-  const scored = scoreRecord(rec);
-  const m = missingSummary(rec);
   return {
     id: rec.id,
     session: rec.session || '',
+    startedAt: rec.startedAt ? new Date(rec.startedAt).toISOString() : '',
     submittedAt: new Date().toISOString(),
     consent: rec.consent ? 1 : 0,
-    neverResearched: rec.neverResearched ? 1 : 0,
     demo: rec.demo,
     raw: rec.answers,
-    scored,
-    summary: m,
+    scored: scoreRecord(rec),
     durationSec: rec.startedAt ? Math.round((Date.now() - rec.startedAt) / 1000) : null,
-    appVersion: rec.appVersion || '1.0.0'
+    appVersion: rec.appVersion || '3.1.0',
+    instrument: rec.instrument || INSTRUMENT_VERSION
   };
 }
 
@@ -101,4 +85,18 @@ export function toScoredCsv(records) {
     lines.push([r.id, ...head.slice(1).map(c => (s[c] == null ? '' : s[c]))].join(','));
   }
   return lines.join('\n');
+}
+
+/**
+ * ข้อมูลสำหรับหน้าเฉลย: เทียบคำตอบของผู้ตอบกับเฉลยรายข้อ
+ * K: ถูก/ไม่ตรงเฉลย  S และ A: คะแนน 0–3 ของตัวเลือกที่เลือก (ไม่มีถูกผิด)
+ * raw เป็น null ได้เฉพาะกรณีข้อมูลเก่าที่ไม่มีคำตอบข้อนั้น
+ */
+export function reviewRecord(rec) {
+  return ITEMS.map(it => {
+    const raw = rec.answers?.[it.code] ?? null;
+    const score = raw == null ? null : (it.scores[raw - 1] ?? null);
+    return { code: it.code, dim: it.dim, raw, score,
+             correct: it.dim === 'K' && score != null ? score === 1 : null };
+  });
 }
