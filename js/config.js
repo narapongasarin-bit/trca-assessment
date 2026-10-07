@@ -1,6 +1,18 @@
-// ตั้งค่าครั้งเดียว ใช้ร่วมกันใน index.html และ results.html
-// คลังข้อสอบและคะแนนเป็นรุ่น TRCA-PROSE-20261007-R1
-window.TRCA_CONFIG = Object.assign({
+// ============================================================
+//  ไฟล์ตั้งค่าระบบ TRCA  แก้ที่ไฟล์นี้ไฟล์เดียว ไม่ต้องแก้ไฟล์อื่น
+// ============================================================
+//
+//  endpoint
+//    ลิงก์ Web app ของ Google Apps Script วางระหว่างเครื่องหมาย ' '
+//    ต้องขึ้นต้นด้วย https://script.google.com/macros/s/ และลงท้ายด้วย /exec
+//    (ห้ามลงท้าย /dev และห้ามเว้นวรรคหรือขึ้นบรรทัดใหม่ในลิงก์)
+//    ถ้าเว้นว่าง หน้าแรกจะแจ้งเตือนว่ายังตั้งค่าไม่เสร็จ
+//
+//  revealAnswers
+//    true  = ครูดูเฉลยและเหตุผลได้หลังส่งแบบประเมินแล้ว
+//    false = ยังไม่แสดงเฉลย (ใช้ระหว่างเก็บข้อมูล กันเฉลยแพร่ไปถึงผู้ที่ยังไม่ได้ทำ)
+
+window.TRCA_CONFIG = {
   endpoint: 'https://script.google.com/macros/s/AKfycbzjXzU2V8uH8BpP1cVgCeIIlO2cQimmsdFDbGqq78IYzOQcjq5L2qLy4YxngUYuiBHFaQ/exec',
   revealAnswers: true
-}, window.TRCA_CONFIG || {});
+};
