@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
 <title>ตรวจสอบผลการประเมิน — TRCA</title>
 <link rel="stylesheet" href="css/style.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,7 +20,7 @@
   .tbar>i{display:block;height:100%}
   .tsc{font-size:13px;color:var(--ink3)}
 </style>
-<script>window.TRCA_CONFIG = { endpoint: '' };</script>
+<script src="config.js"></script>
 </head>
 <body>
 <header><div class="bar"><span class="t">ตรวจสอบผลการประเมิน</span></div></header>
@@ -27,7 +28,7 @@
 <div class="actions"><div id="actions"></div></div>
 
 <script>
-const ENDPOINT = window.TRCA_CONFIG.endpoint || '';
+const ENDPOINT = (window.TRCA_CONFIG || {}).endpoint || '';
 const $ = s => document.querySelector(s);
 const el = (t,c,x) => { const e=document.createElement(t); if(c)e.className=c; if(x!=null)e.innerHTML=x; return e; };
 

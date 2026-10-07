@@ -2,6 +2,7 @@
 <html lang="th" data-theme="light">
 <head>
 <meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>TRCA — แปลงข้อมูลสำหรับ ACER ConQuest 2.0</title>
 <link rel="stylesheet" href="../css/style.css">
@@ -33,14 +34,15 @@
 
   <h2 style="margin-top:18px">ขั้นที่ 2 วางข้อมูลทั่วไป (ไม่บังคับ)</h2>
   <p class="muted">คัดลอกจากชีต <code>Person_Info</code> ใช้เติมคอลัมน์ 8–10 ของแฟ้ม .dat
-     คือวิทยฐานะ ขนาดโรงเรียน และประสบการณ์วิจัย หากไม่วาง ระบบจะใส่จุดแทน</p>
+     คือวิทยฐานะ ขนาดโรงเรียน และประสบการณ์วิจัย หากไม่วาง ระบบจะใส่จุดแทน
+     และจะตรวจรุ่นเครื่องมือจากคอลัมน์ <code>Instrument</code> ให้ด้วย</p>
   <textarea id="person" placeholder="ID,submittedAt,consent,sex,vt,yrs,sz,grade,ex,..."></textarea>
 
   <div class="row">
     <button id="go">ตรวจข้อมูลและสร้างแฟ้ม</button>
     <button id="dat" class="ghost" disabled>ดาวน์โหลด trca.dat</button>
     <button id="lab" class="ghost" disabled>ดาวน์โหลดแฟ้ม .lab ทั้งชุด</button>
-    <button id="cqc" class="ghost" disabled>ดาวน์โหลดแฟ้มคำสั่ง .cqc</button>
+    <button id="cqc" class="ghost" disabled>ดาวน์โหลดคำสั่งตัวอย่าง 01_K_Rasch.cqc</button>
   </div>
 </div>
 
@@ -62,6 +64,9 @@ for(let i=1;i<=28;i++)K.push('K'+String(i).padStart(2,'0'));
 for(let i=1;i<=20;i++)S.push('S'+String(i).padStart(2,'0'));
 for(let i=1;i<=20;i++)A.push('A'+String(i).padStart(2,'0'));
 const ALL=[...K,...S,...A], MISS='.';
+// DOK ที่เสนอรายข้อของมิติ K ตามตาราง 4.3 ของเอกสาร (เป็นข้อเสนอเพื่อตรวจ ไม่ใช่ระดับความสามารถหรือความยาก)
+const DOK_K=[1, 2, 2, 3, 2, 2, 3, 3, 1, 2, 3, 2, 1, 2, 2, 3, 2, 2, 2, 3, 1, 2, 2, 3, 1, 2, 2, 3];
+const EXPECTED_INSTRUMENT='TRCA-PROSE-20261007-R1';   // ต้องตรงกับ INSTRUMENT_VERSION ใน js/items.js และ ACCEPTED_INSTRUMENT ใน server/Code.gs
 let DAT='',LABS=null;
 
 const $=s=>document.querySelector(s);
@@ -74,7 +79,7 @@ function parse(txt){
 }
 function dl(name,text){
   const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));
+  a.href=URL.createObjectURL(new Blob([text.replace(/\r?\n/g,'\r\n')],{type:'text/plain;charset=utf-8'}));   // ขึ้นบรรทัดแบบ Windows
   a.download=name;a.click();URL.revokeObjectURL(a.href);
 }
 
@@ -86,17 +91,16 @@ $('#go').onclick=()=>{
   if(miss.length){warn.push(`ไม่พบคอลัมน์ ${miss.length} คอลัมน์ ได้แก่ ${miss.slice(0,8).join(', ')}${miss.length>8?' …':''}`);}
 
   const per=parse($('#person').value);
-  const pmap={}; if(per)per.forEach(p=>{pmap[p.ID]={vt:p.vt,sz:p.sz,ex:p.ex};});
+  const pmap={}; if(per)per.forEach(p=>{pmap[p.ID]={vt:p.vt,sz:p.sz,ex:p.ex,ins:(p.Instrument||'').trim()};});
 
   // ---------- ตรวจคุณภาพ ----------
   const naItem={},cat={},bad=[];
   ALL.forEach(c=>{naItem[c]=0;cat[c]={};});
-  let overA=0;
+  const DIMS={K,S,A}, over={K:0,S:0,A:0};
   rows.forEach(r=>{
-    let naA=0;
     ALL.forEach(c=>{
       const v=(r[c]??'').toString().trim();
-      if(v===''){naItem[c]++; if(c[0]==='A')naA++;}
+      if(v===''){naItem[c]++;}
       else{
         const n=Number(v);
         const maxv=c[0]==='K'?1:3;
@@ -104,16 +108,31 @@ $('#go').onclick=()=>{
         cat[c][v]=(cat[c][v]||0)+1;
       }
     });
-    if(naA/20>0.10)overA++;
+    for(const d of ['K','S','A']){
+      const miss=DIMS[d].filter(c=>(r[c]??'').toString().trim()==='').length;
+      if(miss/DIMS[d].length>0.10)over[d]++;
+    }
   });
   const N=rows.length;
   info.push(`จำนวนผู้ตอบ <b>${N}</b> คน  จำนวนข้อ <b>${ALL.length}</b> ข้อ`);
-  const naK=K.reduce((s,c)=>s+naItem[c],0),naS=S.reduce((s,c)=>s+naItem[c],0),naA2=A.reduce((s,c)=>s+naItem[c],0);
-  info.push(`ข้อมูลขาดหาย: มิติ K <b>${naK}</b> ช่อง  มิติ S <b>${naS}</b> ช่อง  มิติ A <b>${naA2}</b> ช่อง (${(100*naA2/(N*20)).toFixed(1)}%)`);
-  const neverS=rows.filter(r=>S.every(c=>(r[c]??'')==='')).length;
-  info.push(`ครูที่ข้ามตอนที่ 2 ทั้งตอน <b>${neverS}</b> คน  คิดเป็น ${(100*neverS/N).toFixed(1)}%`);
-  if(naK>0)warn.push(`มิติ K มีข้อมูลขาดหาย ${naK} ช่อง ซึ่งไม่ควรเกิดขึ้นเพราะทุกคนต้องตอบครบ`);
-  if(overA>0)warn.push(`ผู้ตอบ <b>${overA}</b> คน (${(100*overA/N).toFixed(1)}%) มีข้อมูลขาดหายในมิติ A เกินร้อยละ 10 — ACER ConQuest 2.0 อาจประมาณค่าความสามารถของกลุ่มนี้ไม่ได้`);
+  const nm=d=>DIMS[d].reduce((s,c)=>s+naItem[c],0);
+  info.push(`ช่องว่าง (ข้อมูลขาดหาย): มิติ K <b>${nm('K')}</b> ช่อง  มิติ S <b>${nm('S')}</b> ช่อง  มิติ A <b>${nm('A')}</b> ช่อง`);
+  const nmAll=nm('K')+nm('S')+nm('A');
+  if(nmAll>0)warn.push(`พบช่องว่างรวม ${nmAll} ช่อง ระบบเว็บบังคับตอบครบทุกข้อ ช่องว่างจึงไม่ควรมีในข้อมูลจากเว็บ ให้ตรวจที่มา (เช่น แถวที่กรอกจากแบบกระดาษ หรือนำเข้าผิดพลาด) ช่องว่างคือข้อมูลขาดหาย ไม่ใช่คะแนน 0`);
+  const dn={K:'ความรู้ (K)',S:'ทักษะ (S)',A:'คุณลักษณะ (A)'};
+  for(const d of ['K','S','A'])
+    if(over[d]>0)warn.push(`ผู้ตอบ <b>${over[d]}</b> คน (${(100*over[d]/N).toFixed(1)}%) มีช่องว่างในมิติ${dn[d]} เกินร้อยละ 10 ของมิตินั้น — ACER ConQuest 2.0 อาจประมาณค่าความสามารถของกลุ่มนี้ไม่ได้ ตรวจผลต่อความลำเอียงก่อนตัดสินใจคัดออกหรือคงไว้`);
+
+  // ตรวจรุ่นเครื่องมือ (ต้องวาง Person_Info ที่มีคอลัมน์ Instrument)
+  if(per){
+    const ins={}; per.forEach(p=>{const k=(p.Instrument||'').trim()||'(ไม่ระบุ)'; ins[k]=(ins[k]||0)+1;});
+    const keys=Object.keys(ins);
+    info.push('รุ่นเครื่องมือในข้อมูล: '+keys.map(k=>`<b>${k}</b> ${ins[k]} คน`).join(' · '));
+    if(keys.length>1||keys[0]!==EXPECTED_INSTRUMENT)
+      warn.push(`พบข้อมูลที่ไม่ใช่รุ่นเครื่องมือ ${EXPECTED_INSTRUMENT} ทั้งหมด (${keys.map(k=>`${k}: ${ins[k]} คน`).join(', ')}) — ห้ามรวมคำตอบต่างรุ่นเป็นชุดเดียวกัน ให้แยกแถวของรุ่นอื่นออกก่อนสร้างแฟ้ม`);
+  } else {
+    info.push('ยังไม่ได้วาง Person_Info จึงตรวจรุ่นเครื่องมือไม่ได้');
+  }
   if(bad.length)warn.push(`พบค่าผิดช่วง ${bad.length} ช่อง เช่น ${bad.slice(0,5).join(', ')}`);
 
   // ข้อที่มีบางระดับคะแนนน้อยเกินไป
@@ -123,8 +142,8 @@ $('#go').onclick=()=>{
     for(let k=0;k<=maxv;k++){const n=cat[c][String(k)]||0; if(n<3)thin.push(`${c} ระดับ ${k} มี ${n} คน`);}
   });
   if(thin.length)warn.push(`ข้อที่มีผู้ตอบบางระดับน้อยกว่า 3 คน ซึ่งอาจประมาณค่าขีดจำกัดไม่ได้: ${thin.slice(0,10).join(' · ')}${thin.length>10?' …':''}`);
-  const hiNA=A.filter(c=>naItem[c]/N>0.10).map(c=>`${c} ${(100*naItem[c]/N).toFixed(0)}%`);
-  if(hiNA.length)warn.push(`ข้อในมิติ A ที่มีอัตราเลือก “ยังไม่เคยเจอสถานการณ์นี้” เกินร้อยละ 10: ${hiNA.join(' · ')} — ควรทบทวนสถานการณ์ของข้อเหล่านี้`);
+  const hiNA=ALL.filter(c=>naItem[c]/N>0.10).map(c=>`${c} ${(100*naItem[c]/N).toFixed(0)}%`);
+  if(hiNA.length)warn.push(`ข้อที่มีช่องว่างเกินร้อยละ 10: ${hiNA.slice(0,12).join(' · ')}${hiNA.length>12?' …':''} — ควรตรวจที่มาของช่องว่างและความชัดเจนของข้อเหล่านี้`);
 
   // ---------- สร้างแฟ้ม .dat ----------
   const lines=rows.map(r=>{
@@ -140,7 +159,7 @@ $('#go').onclick=()=>{
   DAT=lines.join('\n')+'\n';
 
   LABS={
-    'trca_K.lab':'===> item\n'+K.map((c,i)=>`${i+1} ${c}_DOK${(i%4)+1}`).join('\n')+'\n',
+    'trca_K.lab':'===> item\n'+K.map((c,i)=>`${i+1} ${c}_DOK${DOK_K[i]}`).join('\n')+'\n',
     'trca_S.lab':'===> item\n'+S.map((c,i)=>`${i+1} ${c}`).join('\n')+'\n',
     'trca_A.lab':'===> item\n'+A.map((c,i)=>`${i+1} ${c}`).join('\n')+'\n',
     'trca_all.lab':'===> item\n'+ALL.map((c,i)=>`${i+1} ${c}`).join('\n')+'\n'
@@ -159,19 +178,22 @@ $('#go').onclick=()=>{
 
 $('#dat').onclick=()=>dl('trca.dat',DAT);
 $('#lab').onclick=()=>Object.entries(LABS).forEach(([n,t])=>dl(n,t));
-$('#cqc').onclick=()=>dl('trca_K_uni.cqc',
-`Title TRCA: Dimension K, Dichotomous Rasch;
-Datafile trca.dat;
-Format id 1-6 vt 8 sz 9 ex 10 responses 12-39;
-Codes 0,1;
-Labels << trca_K.lab;
-Model item;
-Set constraints=cases;
-Estimate ! method=gauss, nodes=30, converge=0.0001, iterations=2000;
-Show ! estimates=latent, tables=1:2:3:4 >> K_uni.shw;
-Show cases ! estimates=eap >> K_uni.eap;
-Itanal >> K_uni.itn;
-Export parameters >> K_uni.prm;
+$('#cqc').onclick=()=>dl('01_K_Rasch.cqc',
+`title TRCA K 28 items dichotomous Rasch;
+directory;
+datafile trca.dat;
+format id 1-6 vt 8 sz 9 ex 10 responses 12-39;
+labels << trca_K.lab;
+set constraints=cases,warnings=no;
+model item;
+codes 0,1;
+export parameters >> K_uni.prm;
+estimate;
+show!tables=1:2:3:4:5:9,estimates=latent >> K_uni.shw;
+itanal >> K_uni.itn;
+show cases !estimates=mle >> K_uni.mle;
+show cases !estimates=eap >> K_uni.eap;
+export designmatrix >> K_uni.dsm;
 `);
 </script>
 </body>

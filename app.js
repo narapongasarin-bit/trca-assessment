@@ -1,19 +1,25 @@
 // app.js — ตรรกะหลักของระบบประเมินสมรรถนะการวิจัยของครู (TRCA)
-import { ITEMS, SECTIONS, DEMOGRAPHICS } from './items.js';
-import { CODES, unanswered, toSubmissionRow, toConQuestLine, toScoredCsv, missingSummary } from './scoring.js';
+import { ITEMS, SECTIONS, DEMOGRAPHICS, INSTRUMENT_VERSION } from './items.js?v=3.1.0';
+import { CODES, unanswered, toSubmissionRow, reviewRecord } from './scoring.js?v=3.1.0';
 
 const CFG = window.TRCA_CONFIG || {};
 const ENDPOINT = CFG.endpoint || '';          // URL ของ Google Apps Script Web App
-const VERSION = '1.0.0';
-const LSKEY = 'trca.session.v1';
+const VERSION = '3.2.0';
+// แสดงเฉลยและเหตุผลหลังส่งแบบประเมินแล้ว (ค่าเริ่มต้น เปิด) ปิดได้โดยตั้ง revealAnswers: false ในไฟล์ config.js
+const REVEAL = CFG.revealAnswers !== false;
+// ตรวจลิงก์ปลายทางตั้งแต่หน้าแรก ไม่ให้ครูทำจนจบ 90 นาทีแล้วจึงรู้ว่าส่งข้อมูลไม่ได้
+const EP_OK = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(ENDPOINT);
+const EP_DEMO = CFG.demo === true;      // หน้าตัวอย่างสำหรับทดลอง ไม่ส่งข้อมูลจริง
+// คีย์ใหม่ต่างจากรุ่นก่อนหน้า เพื่อไม่นำคำตอบที่ค้างอยู่ในเครื่องจากเครื่องมือฉบับเก่ามารวมกับฉบับนี้
+const LSKEY = 'trca.session.v3';
 
 const $ = s => document.querySelector(s);
 const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
 
 // ---------------- สถานะ ----------------
 let S = load() || {
-  id: newId(), session: newSession(), consent: false, demo: {}, neverResearched: null,
-  answers: {}, startedAt: Date.now(), appVersion: VERSION, submitted: false
+  id: newId(), session: newSession(), consent: false, demo: {},
+  answers: {}, startedAt: Date.now(), appVersion: VERSION, instrument: INSTRUMENT_VERSION, submitted: false
 };
 
 // รหัสผู้ตอบต้องยาว 6 อักขระพอดี เพื่อให้ตรงกับคอลัมน์ 1–6 ของแฟ้ม .dat ที่ ConQuest อ่าน
@@ -32,18 +38,27 @@ function newSession() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 function save() { try { localStorage.setItem(LSKEY, JSON.stringify(S)); } catch (e) {} }
-function load() { try { return JSON.parse(localStorage.getItem(LSKEY) || 'null'); } catch (e) { return null; } }
+function load() {
+  try {
+    const st = JSON.parse(localStorage.getItem(LSKEY) || 'null');
+    // ไม่นำเซสชันของเครื่องมือรุ่นอื่นมาใช้ต่อ เพราะข้อความและลำดับตัวเลือกต่างกัน
+    if (!st || st.instrument !== INSTRUMENT_VERSION) return null;
+    // ทุกข้อต้องตอบ 1–4 ค่าอื่น (เช่น ค่า D จากหน้าเว็บรุ่นที่เคยมีปุ่มไม่ประสงค์ตอบ) ถือว่ายังไม่ได้ตอบ
+    const a = st.answers || {};
+    Object.keys(a).forEach(k => { if (![1, 2, 3, 4].includes(a[k])) delete a[k]; });
+    st.answers = a;
+    return st;
+  } catch (e) { return null; }
+}
 
 // ---------------- ลำดับหน้าจอ ----------------
-// consent → demo → intro:K → K01..K28 → screen:S → intro:S → S01..S20 → intro:A → A01..A20 → review → done
+// consent → demo → intro:K → K01..K28 → intro:S → S01..S20 → intro:A → A01..A20 → review → done
+// ทุกคนผ่านครบทุกตอน มิติ S ไม่มีหน้าคัดกรองและไม่มีการข้าม
 function buildFlow() {
   const f = [{ t: 'consent' }, { t: 'demo' }, { t: 'intro', dim: 'K' }];
   CODES.K.forEach(c => f.push({ t: 'item', code: c }));
-  f.push({ t: 'screen' });
-  if (S.neverResearched === false) {
-    f.push({ t: 'intro', dim: 'S' });
-    CODES.S.forEach(c => f.push({ t: 'item', code: c }));
-  }
+  f.push({ t: 'intro', dim: 'S' });
+  CODES.S.forEach(c => f.push({ t: 'item', code: c }));
   f.push({ t: 'intro', dim: 'A' });
   CODES.A.forEach(c => f.push({ t: 'item', code: c }));
   f.push({ t: 'review' }, { t: 'done' });
@@ -51,6 +66,8 @@ function buildFlow() {
 }
 let flow = buildFlow();
 let pos = 0;
+let showAnswers = false;   // หน้าเฉลย ไม่อยู่ในลำดับหน้าหลัก
+let ansTab = 'K';
 
 // ---------------- การวาดหน้าจอ ----------------
 const DIMVAR = { K: 'var(--k)', S: 'var(--s)', A: 'var(--a)' };
@@ -61,6 +78,8 @@ function render() {
   const step = flow[pos];
   const main = $('#main'); main.innerHTML = '';
   $('#actions').innerHTML = '';
+  if (showAnswers && S.submitted && REVEAL) { vAnswers(main); window.scrollTo(0, 0); return; }
+  showAnswers = false;
 
   const dim = step.dim || (step.code ? step.code[0] : null);
   document.documentElement.style.setProperty('--accent', dim ? DIMVAR[dim] : 'var(--k)');
@@ -73,7 +92,7 @@ function render() {
   $('#pcount').textContent = totalItems ? `${answeredItems} / ${totalItems} ข้อ` : '';
   $('#pbar').style.width = (totalItems ? (answeredItems / totalItems) * 100 : 0) + '%';
 
-  ({ consent: vConsent, demo: vDemo, intro: vIntro, item: vItem, screen: vScreen, review: vReview, done: vDone })[step.t](step, main);
+  ({ consent: vConsent, demo: vDemo, intro: vIntro, item: vItem, review: vReview, done: vDone })[step.t](step, main);
   window.scrollTo(0, 0);
 }
 
@@ -107,9 +126,16 @@ function vConsent(_s, main) {
     <div class="chips">
       <span class="chip">3 มิติ</span>
       <span class="chip">68 ข้อ</span>
-      <span class="chip">เวลาทำข้อสอบประมาณ 2 ชั่วโมง</span>
+      <span class="chip">เวลาทำข้อสอบประมาณ 90 นาที</span>
     </div>`;
   main.appendChild(banner);
+
+  if (!EP_OK && !EP_DEMO) {
+    const w = el('div', 'note');
+    w.style.cssText = 'margin:0 0 14px;border-color:#B5473A;background:#FDE9E5';
+    w.innerHTML = '<b>ระบบรับข้อมูลยังตั้งค่าไม่เสร็จ</b><br>คำตอบอาจส่งถึงผู้วิจัยไม่ได้ กรุณาแจ้งผู้วิจัยก่อนเริ่มทำแบบประเมิน';
+    main.appendChild(w);
+  }
 
   const c = el('div', 'card');
   c.innerHTML = `
@@ -127,7 +153,14 @@ function vConsent(_s, main) {
       <tr><td>2</td><td>ทักษะการวิจัย</td><td>20</td></tr>
       <tr><td>3</td><td>คุณลักษณะ</td><td>20</td></tr>
     </table>
-    <p class="muted">ใช้เวลารวมประมาณ 2 ชั่วโมง ท่านหยุดพักแล้วกลับมาทำต่อได้ ระบบบันทึกคำตอบไว้ในเครื่องของท่านโดยอัตโนมัติ</p>
+    <p class="muted">ใช้เวลาตอบประมาณ 90 นาที (ไม่รวมเวลาอ่านคำชี้แจงและพัก) ท่านหยุดพักแล้วกลับมาทำต่อได้ ระบบบันทึกคำตอบไว้ในเครื่องของท่านโดยอัตโนมัติ</p>
+    <h3>ข้อควรทราบก่อนตอบ</h3>
+    <ul class="plain">
+      <li>เลือกเพียงหนึ่งตัวเลือกต่อข้อ ใช้ข้อมูลในโจทย์เป็นหลัก ไม่จำเป็นต้องเคยพบเหตุการณ์นั้นจริง</li>
+      <li>โปรดตอบด้วยตนเอง โดยไม่ค้นคำตอบหรือปรึกษาผู้อื่นระหว่างตอบ</li>
+      <li>ต้องตอบครบทุกข้อจึงจะส่งได้ ท่านขอพักหรือยุติการเข้าร่วมได้ทุกเมื่อ หากยุติก่อนกดส่ง คำตอบจะไม่ถูกส่งถึงผู้วิจัย</li>
+      ${REVEAL ? '<li>เมื่อส่งแบบประเมินแล้ว ท่านจะดูเฉลยและเหตุผลรายข้อได้</li>' : ''}
+    </ul>
     <h3>การคุ้มครองข้อมูล</h3>
     <p>ระบบไม่เก็บชื่อ นามสกุล หรือชื่อโรงเรียนของท่าน ใช้เพียงรหัสอ้างอิงที่ระบบสร้างขึ้น
        ท่านมีสิทธิหยุดตอบเมื่อใดก็ได้โดยไม่ต้องแจ้งเหตุผล</p>
@@ -139,6 +172,7 @@ function vConsent(_s, main) {
   const credit = el('p', 'muted', 'จัดทำโดย นายนราพงศ์ อาษารินทร์  ศึกษานิเทศก์ สพป.เลย เขต 1');
   credit.style.textAlign = 'center'; credit.style.marginTop = '18px'; credit.style.fontSize = '13.5px';
   main.appendChild(credit);
+  main.appendChild(el('p', 'vtag', `รุ่นเครื่องมือ ${INSTRUMENT_VERSION}`));
   const nextOk = () => $('#cs').checked;
   chk.querySelector('input').onchange = () => { S.consent = nextOk(); save(); render(); };
   nav(null, 'เริ่มทำแบบประเมิน', () => { pos++; render(); }, S.consent);
@@ -169,10 +203,12 @@ function vIntro(step, main) {
   const c = el('div', 'card');
   c.appendChild(el('span', 'tag', `${sec.n} ข้อ`));
   c.appendChild(el('h2', null, sec.title));
-  const n = el('div', 'note'); n.innerHTML = '<b>คำชี้แจง</b><br>' + sec.note;
+  const n = el('div', 'note');
+  n.appendChild(el('b', null, 'คำชี้แจง'));
+  const ul = el('ul');
+  sec.points.forEach(t => ul.appendChild(el('li', null, t)));
+  n.appendChild(ul);
   c.appendChild(n);
-  if (step.dim === 'A')
-    c.appendChild(el('p', 'muted', 'ตัวเลือกสุดท้ายของทุกข้อคือ “ยังไม่เคยเจอสถานการณ์นี้” ซึ่งจะไม่ถูกนับเป็นคะแนน โปรดเลือกตามความเป็นจริง'));
   main.appendChild(c);
   nav('ย้อนกลับ', 'เริ่มตอนนี้', () => { pos++; render(); });
 }
@@ -184,13 +220,11 @@ function vItem(step, main) {
   const c = el('div', 'card');
   c.appendChild(el('span', 'tag', `ข้อ ${idx} จาก ${CODES[it.dim].length}`));
   c.appendChild(el('div', 'stem', it.stem));
-  if (it.dim === 'S')
-    c.appendChild(el('p', 'muted', 'ตอบจากงานวิจัยเรื่องล่าสุดเรื่องเดียวที่ท่านทำจริง'));
 
   const box = el('div', 'opts'); box.setAttribute('role', 'radiogroup');
   it.options.forEach((txt, i) => {
     const n = i + 1;
-    const b = el('button', 'opt' + (it.naOption === n ? ' na' : ''));
+    const b = el('button', 'opt');
     b.type = 'button'; b.setAttribute('role', 'radio');
     b.setAttribute('aria-checked', String(S.answers[it.code] === n));
     b.appendChild(el('span', 'n', String(n)));
@@ -202,37 +236,15 @@ function vItem(step, main) {
     };
     box.appendChild(b);
   });
-  c.appendChild(box); main.appendChild(c);
-  nav('ย้อนกลับ', 'ข้ามไปก่อน', () => { pos++; render(); });
-}
-
-// ---------------- คำถามคัดกรองก่อนตอนที่ 2 ----------------
-function vScreen(_s, main) {
-  const c = el('div', 'card');
-  c.appendChild(el('h2', null, 'ก่อนเข้าสู่ตอนที่ 2'));
-  c.appendChild(el('p', null, 'ตอนที่ 2 ถามถึงสิ่งที่เกิดขึ้นจริงในงานวิจัยในชั้นเรียนที่ท่านเคยทำ'));
-  const q = el('div', 'stem', 'ท่านเคยทำวิจัยในชั้นเรียนจนเสร็จอย่างน้อยหนึ่งเรื่องหรือไม่');
-  c.appendChild(q);
-  const box = el('div', 'opts');
-  [['เคยทำ และนึกถึงเรื่องล่าสุดได้', false], ['ยังไม่เคยทำวิจัยในชั้นเรียน', true]].forEach(([t, v]) => {
-    const b = el('button', 'opt'); b.type = 'button'; b.setAttribute('role', 'radio');
-    b.setAttribute('aria-checked', String(S.neverResearched === v));
-    b.appendChild(el('span', 'n', v ? '2' : '1'));
-    b.appendChild(el('span', 'x', t));
-    b.onclick = () => {
-      S.neverResearched = v;
-      if (v) CODES.S.forEach(code => { delete S.answers[code]; });
-      save(); pos++; render();
-    };
-    box.appendChild(b);
-  });
   c.appendChild(box);
-  const n = el('div', 'note');
-  n.innerHTML = 'หากท่านยังไม่เคยทำวิจัยในชั้นเรียน ระบบจะข้ามตอนที่ 2 ทั้งตอน '
-    + 'และบันทึกเป็นข้อมูลขาดหาย <b>ไม่ใช่คะแนนต่ำสุด</b> เพราะการไม่เคยทำอาจมาจากการไม่มีโอกาส มิใช่การไม่มีทักษะ';
-  c.appendChild(n);
+
   main.appendChild(c);
-  nav('ย้อนกลับ', null, null);
+
+  // ทุกข้อต้องตอบ ไม่มีตัวเลือกไม่ประสงค์ตอบ
+  // มิติ S ไม่มีปุ่มข้าม ปุ่มถัดไปใช้ได้เมื่อตอบข้อนี้แล้ว
+  // มิติ K และ A ข้ามไปก่อนแล้วกลับมาตอบทีหลังได้ แต่ต้องตอบครบทุกข้อก่อนส่ง
+  if (it.dim === 'S') nav('ย้อนกลับ', 'ถัดไป', () => { pos++; render(); }, S.answers[it.code] != null);
+  else nav('ย้อนกลับ', 'ข้ามไปก่อน', () => { pos++; render(); });
 }
 
 // ---------------- หน้าทบทวนก่อนส่ง ----------------
@@ -241,10 +253,6 @@ function vReview(_s, main) {
   c.appendChild(el('h2', null, 'ทบทวนก่อนส่ง'));
   let allDone = true;
   ['K', 'S', 'A'].forEach(dim => {
-    if (dim === 'S' && S.neverResearched) {
-      const p = el('p', 'muted', 'ตอนที่ 2 ทักษะการวิจัย — ข้ามทั้งตอน เนื่องจากยังไม่เคยทำวิจัยในชั้นเรียน');
-      c.appendChild(p); return;
-    }
     const miss = unanswered(S, dim);
     if (miss.length) allDone = false;
     const h = el('h3', null, `${SECTIONS.find(s => s.dim === dim).title} — ${miss.length ? 'ยังไม่ตอบ ' + miss.length + ' ข้อ' : 'ตอบครบแล้ว'}`);
@@ -258,15 +266,7 @@ function vReview(_s, main) {
     });
     c.appendChild(g);
   });
-  if (!allDone) c.appendChild(Object.assign(el('div', 'note'), { textContent: 'กรุณาตอบข้อที่เหลือให้ครบก่อนส่ง แตะที่หมายเลขเพื่อกลับไปที่ข้อนั้น' }));
-  const m = missingSummary(S);
-  if (m.A_over10) {
-    const w = el('div', 'note');
-    w.innerHTML = `ท่านเลือก “ยังไม่เคยเจอสถานการณ์นี้” ในตอนที่ 3 จำนวน ${m.A_NA_count} ข้อ
-      ซึ่งเกินร้อยละ 10 ของตอนนี้ หากบางข้อท่านพอนึกออกว่าเคยเจอ ขอความกรุณาทบทวนอีกครั้ง
-      แต่หากไม่เคยเจอจริง โปรดคงคำตอบเดิมไว้`;
-    c.appendChild(w);
-  }
+  if (!allDone) c.appendChild(Object.assign(el('div', 'note'), { textContent: 'ยังมีข้อที่ว่างอยู่ ต้องตอบครบทุกข้อจึงจะส่งได้ แตะที่หมายเลขเพื่อกลับไปตอบข้อนั้น' }));
   main.appendChild(c);
   nav('ย้อนกลับ', 'ส่งแบบประเมิน', doSubmit, allDone);
 }
@@ -295,11 +295,48 @@ async function doSubmit() {
 function vDone(_s, main) {
   const c = el('div', 'card');
   if (S.submitted) {
-    c.appendChild(el('h2', null, 'ส่งแบบประเมินเรียบร้อยแล้ว'));
-    const b = el('div', 'okbox');
-    b.innerHTML = `ขอขอบพระคุณที่สละเวลาตอบแบบประเมิน<br>รหัสอ้างอิงของท่านคือ <code>${S.id}</code>`;
-    c.appendChild(b);
-    c.appendChild(el('p', 'muted', 'ระบบไม่แสดงคะแนนรายบุคคล เนื่องจากคะแนนดิบยังไม่ผ่านการแปลงเป็นค่าความสามารถและยังตีความโดยตรงไม่ได้'));
+    const banner = el('div', 'banner');
+    banner.innerHTML = `
+      <div class="bicon">✅</div>
+      <h1 style="font-size:20px">ส่งแบบประเมินเรียบร้อยแล้ว</h1>
+      <p class="sub">ขอขอบพระคุณที่ท่านสละเวลาตอบแบบประเมิน</p>`;
+    main.appendChild(banner);
+
+    const idbox = el('div', 'okbox');
+    idbox.innerHTML = `รหัสอ้างอิงของท่านคือ<br><code style="font-size:20px">${S.id}</code>
+      <p class="muted" style="margin:8px 0 0">โปรดจดหรือถ่ายภาพหน้านี้ไว้ ใช้ตรวจสอบผลได้ภายหลัง</p>`;
+    c.appendChild(idbox);
+
+    c.appendChild(el('h3', null, 'สรุปสิ่งที่ท่านทำวันนี้'));
+    const g = el('div', 'grid'); g.style.gridTemplateColumns = 'repeat(3,1fr)';
+    ['K', 'S', 'A'].forEach(dim => {
+      const sec = SECTIONS.find(x => x.dim === dim);
+      const done = CODES[dim].filter(x => S.answers[x] != null).length;
+      const cell = el('div');
+      cell.style.cssText = 'text-align:center;padding:14px 6px;border:1.5px solid var(--line);border-radius:10px';
+      cell.innerHTML = `<div style="font-size:13px;color:var(--ink3);margin-bottom:4px">${sec.title.replace(/^ตอนที่ \d+\s+/, '')}</div>
+        <div style="font-size:22px;font-weight:700;color:var(--accent)">${done}/${sec.n}</div>`;
+      g.appendChild(cell);
+    });
+    c.appendChild(g);
+
+    if (REVEAL) {
+      c.appendChild(el('h3', null, 'เฉลยและเหตุผล'));
+      c.appendChild(el('p', null, 'ดูว่าแต่ละข้อมีคำตอบหรือแนวทางที่เหมาะสมอย่างไร พร้อมเหตุผล เพื่อใช้ทบทวนและพัฒนาตนเอง'));
+      const rb = el('button', 'btn', 'ดูเฉลยและเหตุผล');
+      rb.style.width = '100%';
+      rb.onclick = () => { showAnswers = true; ansTab = 'K'; render(); };
+      c.appendChild(rb);
+    } else {
+      const wait = el('div', 'note'); wait.style.marginTop = '16px';
+      wait.innerHTML = '<b>เฉลยและเหตุผล</b><br>ผู้วิจัยจะแจ้งให้ทราบเมื่อเก็บข้อมูลครบแล้ว';
+      c.appendChild(wait);
+    }
+    const note = el('div', 'note'); note.style.marginTop = '16px';
+    note.innerHTML = `<b>เฉลยรายข้อไม่ใช่ระดับสมรรถนะ</b><br>
+      ระดับที่แปลผลได้ต้องนำคำตอบไปวิเคราะห์ร่วมกับผู้ตอบท่านอื่นทั้งหมดก่อน
+      เมื่อเก็บข้อมูลครบและวิเคราะห์เสร็จ ท่านสามารถกลับมาตรวจสอบผลของตนเองได้ด้วยรหัสอ้างอิงข้างต้น`;
+    c.appendChild(note);
   } else {
     c.appendChild(el('h2', null, 'ยังส่งข้อมูลไม่สำเร็จ'));
     const n = el('div', 'note');
@@ -315,10 +352,113 @@ function vDone(_s, main) {
     const retry = el('button', 'btn', 'ลองส่งใหม่');
     retry.onclick = () => { pos = flow.findIndex(f => f.t === 'review'); render(); };
     box.appendChild(retry);
+  } else {
+    const chk = el('button', 'btn', 'ตรวจสอบผลภายหลัง');
+    chk.onclick = () => { location.href = `results.html?id=${encodeURIComponent(S.id)}`; };
+    box.appendChild(chk);
   }
   const dl = el('button', 'btn ghost', 'บันทึกเป็นไฟล์');
   dl.onclick = downloadBackup;
   box.appendChild(dl);
+  $('#actions').appendChild(box);
+}
+
+// ---------------- หน้าเฉลยและเหตุผล (แสดงหลังส่งแบบประเมินแล้วเท่านั้น) ----------------
+function tag(text, cls) { return el('span', 'tg ' + cls, text); }
+
+function vAnswers(main) {
+  $('#ptitle').textContent = 'เฉลยและเหตุผล';
+  $('#pcount').textContent = '';
+  $('#pbar').style.width = '100%';
+  document.documentElement.style.setProperty('--accent', DIMVAR[ansTab]);
+
+  const rv = reviewRecord(S);
+  const by = Object.fromEntries(rv.map(r => [r.code, r]));
+  const c = el('div', 'card');
+  c.appendChild(el('h2', null, 'เฉลยและเหตุผล'));
+  const intro = el('div', 'note');
+  intro.innerHTML = '<b>วิธีอ่านเฉลย</b><br>ตอนที่ 1 มีคำตอบที่ถูกเพียงข้อเดียว ส่วนตอนที่ 2 และ 3 ไม่มีถูกหรือผิดตายตัว '
+    + 'คะแนน 0–3 บอกว่าตัวเลือกนั้นสอดคล้องกับเกณฑ์ของข้อมากเพียงใด เฉลยนี้ใช้เพื่อการเรียนรู้ ไม่ใช่การประเมินผลการปฏิบัติงานหรือระดับสมรรถนะของท่าน';
+  c.appendChild(intro);
+
+  // แท็บเลือกตอน
+  const tabs = el('div', 'tabs'); tabs.setAttribute('role', 'group');
+  ['K', 'S', 'A'].forEach((dim, i) => {
+    const b = el('button', 'tab', `ตอนที่ ${i + 1}`);
+    b.type = 'button'; b.setAttribute('aria-pressed', String(ansTab === dim));
+    b.onclick = () => { ansTab = dim; render(); };
+    tabs.appendChild(b);
+  });
+  c.appendChild(tabs);
+  const sec = SECTIONS.find(x => x.dim === ansTab);
+  c.appendChild(el('h3', null, sec.title));
+
+  const list = ITEMS.filter(i => i.dim === ansTab);
+  const mine = list.map(i => by[i.code]);
+  const blank = mine.filter(r => r.raw == null).length;   // เป็น 0 เสมอ ยกเว้นข้อมูลเก่าที่ไม่มีคำตอบข้อนั้น
+
+  // สรุปของตอน
+  const sum = el('div', 'okbox');
+  if (ansTab === 'K') {
+    const right = mine.filter(r => r.correct).length;
+    const answered = mine.length - blank;
+    sum.innerHTML = blank === 0
+      ? `ตอบถูก <b>${right}</b> จาก ${mine.length} ข้อ`
+      : `ตอบถูก <b>${right}</b> ข้อ จากข้อที่ตอบ ${answered} ข้อ`;
+  } else {
+    const cnt = [3, 2, 1, 0].map(v => mine.filter(r => r.score === v).length);
+    sum.innerHTML = '<div>จำนวนข้อตามคะแนนของตัวเลือกที่ท่านเลือก</div><div class="dist">'
+      + [3, 2, 1, 0].map((v, k) => `<div><b>${cnt[k]} ข้อ</b><span>ได้ ${v} คะแนน</span></div>`).join('')
+      + '</div>'
+      + '<div class="muted">เป็นการสรุปรายข้อ ไม่ใช่ระดับสมรรถนะของท่าน</div>';
+  }
+  c.appendChild(sum);
+
+  // รายข้อ
+  list.forEach((it, i) => {
+    const r = by[it.code];
+    const d = el('details', 'rv ' + (it.dim === 'K' ? (r.raw == null ? 'skip' : (r.correct ? 'ok' : 'bad')) : (r.raw == null ? 'skip' : 'sc')));
+    const sm = el('summary');
+    sm.appendChild(el('span', 'rvn', `ข้อ ${i + 1}`));
+    let st;
+    if (r.raw == null) st = 'ไม่มีคำตอบ';
+    else if (it.dim === 'K') st = r.correct ? '✓ ตอบถูก' : '✗ ไม่ตรงเฉลย';
+    else st = `เลือกตัวเลือก ${r.raw} · ได้ ${r.score}/3 คะแนน`;
+    sm.appendChild(el('span', 'rvs', st));
+    d.appendChild(sm);
+    const body = el('div', 'rvb');
+    body.appendChild(el('p', 'rvstem', it.stem));
+    const ol = el('ol', 'rvopts');
+    it.options.forEach((txt, k) => {
+      const n = k + 1;
+      const li = el('li');
+      if (it.dim === 'K' ? it.key === n : it.scores[k] === 3) li.className = 'best';
+      if (r.raw === n) li.className += ' mine';
+      li.appendChild(el('span', 'n', String(n)));
+      const x = el('span', 'x'); x.appendChild(el('span', null, txt));
+      const tg = el('span', 'tgs');
+      if (r.raw === n) tg.appendChild(tag('ท่านเลือก', 'me'));
+      if (it.dim === 'K' && it.key === n) tg.appendChild(tag('เฉลย', 'key'));
+      if (it.dim !== 'K') tg.appendChild(tag(`${it.scores[k]} คะแนน`, it.scores[k] === 3 ? 'key' : 'sc'));
+      if (tg.childNodes.length) x.appendChild(tg);
+      if (it.dim !== 'K') x.appendChild(el('span', 'why', it.why[k]));
+      li.appendChild(x);
+      ol.appendChild(li);
+    });
+    body.appendChild(ol);
+    if (it.dim === 'K') {
+      const w = el('p', 'rvwhy'); w.appendChild(el('b', null, 'เหตุผล  ')); w.appendChild(document.createTextNode(it.reason));
+      body.appendChild(w);
+    }
+    d.appendChild(body);
+    c.appendChild(d);
+  });
+  main.appendChild(c);
+
+  const box = el('div', 'in');
+  const back = el('button', 'btn ghost', 'กลับหน้าสรุป');
+  back.onclick = () => { showAnswers = false; render(); };
+  box.appendChild(back);
   $('#actions').appendChild(box);
 }
 
@@ -331,9 +471,18 @@ function downloadBackup() {
 }
 
 // ---------------- เริ่มทำงาน ----------------
-// กลับมาต่อจากข้อที่ยังไม่ตอบข้อแรก
+// กลับมาต่อจากจุดที่ค้างไว้: ส่งแล้วไปหน้าจบ ยังไม่ยินยอมเริ่มที่หน้าแรก ข้อมูลทั่วไปไม่ครบกลับไปกรอกให้ครบ
+// นอกนั้นไปที่ข้อแรกที่ยังไม่ตอบ (ถ้าข้อนั้นเป็นข้อแรกของตอน ให้เริ่มที่หน้าคำชี้แจงของตอนนั้น)
+function resumePos() {
+  const fl = buildFlow();
+  if (S.submitted) return fl.length - 1;
+  if (!S.consent) return 0;
+  if (!DEMOGRAPHICS.every(d => S.demo[d.id])) return fl.findIndex(f => f.t === 'demo');
+  const firstUn = fl.findIndex(f => f.t === 'item' && S.answers[f.code] == null);
+  if (firstUn === -1) return fl.findIndex(f => f.t === 'review');
+  return fl[firstUn - 1] && fl[firstUn - 1].t === 'intro' ? firstUn - 1 : firstUn;
+}
 flow = buildFlow();
-const firstUn = flow.findIndex(f => f.t === 'item' && S.answers[f.code] == null);
-if (S.consent && firstUn > 0) pos = firstUn;
+pos = resumePos();
 render();
 window.addEventListener('beforeunload', save);
