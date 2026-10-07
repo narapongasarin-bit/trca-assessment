@@ -8,11 +8,11 @@
  *  3. กด Deploy > New deployment > เลือกชนิด Web app
  *       Execute as: Me
  *       Who has access: Anyone
- *  4. คัดลอก Web app URL ไปวางใน window.TRCA_CONFIG.endpoint ของ index.html
+ *  4. คัดลอก Web app URL ไปวางที่ endpoint ในไฟล์ config.js (ไฟล์ตั้งค่าไฟล์เดียวของเว็บ)
  *  5. รัน setupSheets() หนึ่งครั้งเพื่อสร้างหัวตาราง
  *
  * การอัปเดตโค้ดนี้ภายหลัง: วางทับแล้ว Deploy > Manage deployments > ไอคอนดินสอ > Version: New version > Deploy
- * ลิงก์ Web app เดิมยังใช้ได้ ไม่ต้องแก้ index.html
+ * ลิงก์ Web app เดิมยังใช้ได้ ไม่ต้องแก้ config.js
  *
  * หมายเหตุด้านความปลอดภัย
  *  - ตั้ง Who has access เป็น Anyone เพราะครูผู้ตอบไม่ได้ล็อกอินบัญชี Google
