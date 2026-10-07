@@ -2,6 +2,7 @@
 <html lang="th" data-theme="light">
 <head>
 <meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>TRCA — แปลงข้อมูลสำหรับ ACER ConQuest 2.0</title>
 <link rel="stylesheet" href="../css/style.css">
@@ -41,7 +42,7 @@
     <button id="go">ตรวจข้อมูลและสร้างแฟ้ม</button>
     <button id="dat" class="ghost" disabled>ดาวน์โหลด trca.dat</button>
     <button id="lab" class="ghost" disabled>ดาวน์โหลดแฟ้ม .lab ทั้งชุด</button>
-    <button id="cqc" class="ghost" disabled>ดาวน์โหลดแฟ้มคำสั่ง .cqc</button>
+    <button id="cqc" class="ghost" disabled>ดาวน์โหลดคำสั่งตัวอย่าง 01_K_Rasch.cqc</button>
   </div>
 </div>
 
@@ -78,7 +79,7 @@ function parse(txt){
 }
 function dl(name,text){
   const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));
+  a.href=URL.createObjectURL(new Blob([text.replace(/\r?\n/g,'\r\n')],{type:'text/plain;charset=utf-8'}));   // ขึ้นบรรทัดแบบ Windows
   a.download=name;a.click();URL.revokeObjectURL(a.href);
 }
 
@@ -177,19 +178,22 @@ $('#go').onclick=()=>{
 
 $('#dat').onclick=()=>dl('trca.dat',DAT);
 $('#lab').onclick=()=>Object.entries(LABS).forEach(([n,t])=>dl(n,t));
-$('#cqc').onclick=()=>dl('trca_K_uni.cqc',
-`Title TRCA: Dimension K, Dichotomous Rasch;
-Datafile trca.dat;
-Format id 1-6 vt 8 sz 9 ex 10 responses 12-39;
-Codes 0,1;
-Labels << trca_K.lab;
-Model item;
-Set constraints=cases;
-Estimate ! method=gauss, nodes=30, converge=0.0001, iterations=2000;
-Show ! estimates=latent, tables=1:2:3:4 >> K_uni.shw;
-Show cases ! estimates=eap >> K_uni.eap;
-Itanal >> K_uni.itn;
-Export parameters >> K_uni.prm;
+$('#cqc').onclick=()=>dl('01_K_Rasch.cqc',
+`title TRCA K 28 items dichotomous Rasch;
+directory;
+datafile trca.dat;
+format id 1-6 vt 8 sz 9 ex 10 responses 12-39;
+labels << trca_K.lab;
+set constraints=cases,warnings=no;
+model item;
+codes 0,1;
+export parameters >> K_uni.prm;
+estimate;
+show!tables=1:2:3:4:5:9,estimates=latent >> K_uni.shw;
+itanal >> K_uni.itn;
+show cases !estimates=mle >> K_uni.mle;
+show cases !estimates=eap >> K_uni.eap;
+export designmatrix >> K_uni.dsm;
 `);
 </script>
 </body>

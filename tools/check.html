@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>ตรวจการติดตั้ง — TRCA</title>
+<style>
+  :root{--ink:#1b2733;--ink2:#46525e;--ok:#1c7a5e;--okbg:#e9f4ef;--bad:#b5473a;--badbg:#fde9e5;--warn:#8a5a00;--warnbg:#fff3dc;--line:#d6dde4}
+  *{box-sizing:border-box}
+  body{margin:0;background:#f4f6f8;color:var(--ink);font:16px/1.65 "Sarabun","Noto Sans Thai","Tahoma",system-ui,sans-serif}
+  main{max-width:760px;margin:0 auto;padding:20px 16px 80px}
+  h1{font-size:24px;margin:6px 0 8px}
+  h2{font-size:18px;margin:0 0 10px}
+  .lead{color:var(--ink2);margin:0 0 14px}
+  section{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:16px;margin:14px 0}
+  ul{list-style:none;margin:0;padding:0}
+  li{display:flex;gap:10px;padding:9px 0;border-top:1px solid #eef1f4;align-items:flex-start}
+  li:first-child{border-top:none}
+  .ic{flex:0 0 26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:15px;color:#fff;margin-top:1px}
+  .ic.ok{background:var(--ok)} .ic.bad{background:var(--bad)} .ic.wait{background:#9aa5b1} .ic.info{background:#5b7a99} .ic.skip{background:#9aa5b1}
+  .tx{flex:1;min-width:0;word-break:break-word}
+  .tx small{display:block;color:var(--ink2);font-size:14px}
+  .fix{margin:6px 0 0;padding:8px 10px;border-radius:8px;background:var(--badbg);color:#6e2a21;font-size:14.5px}
+  .fix ol{margin:4px 0 0;padding-left:20px}
+  .sum{padding:14px 16px;border-radius:12px;font-weight:600;border:1.5px solid var(--line);background:#fff}
+  .sum.ok{background:var(--okbg);border-color:var(--ok);color:#0f5640}
+  .sum.bad{background:var(--badbg);border-color:var(--bad);color:#6e2a21}
+  .warnbox{padding:12px 14px;border-radius:10px;background:var(--warnbg);color:var(--warn);margin:0 0 12px;font-size:15px}
+  button{font:inherit;font-weight:600;padding:11px 18px;border-radius:10px;border:1.5px solid #25486d;background:#25486d;color:#fff;cursor:pointer}
+  button:focus-visible{outline:3px solid #7aa6d6;outline-offset:2px}
+  code{background:#eef1f4;padding:1px 6px;border-radius:5px;font-size:14px;word-break:break-all}
+  .meta{color:var(--ink2);font-size:14px;margin-top:14px}
+</style>
+<script src="../config.js"></script>
+</head>
+<body>
+<main>
+  <h1>ตรวจการติดตั้งระบบ TRCA</h1>
+  <p class="lead">หน้านี้ตรวจ 4 เรื่อง คือ ไฟล์ครบหรือไม่ · ตั้งค่า config.js ถูกต้องหรือไม่ · ข้อคำถามโหลดครบ 68 ข้อหรือไม่ · เชื่อมต่อ Google Apps Script ได้และเป็นรุ่นเดียวกับเว็บหรือไม่
+     หน้านี้อ่านข้อมูลอย่างเดียว ไม่ส่งและไม่บันทึกข้อมูลใด ๆ</p>
+  <div id="fileWarn" class="warnbox" hidden>ท่านเปิดไฟล์นี้จากเครื่องของท่านโดยตรง ผลตรวจจะผิดพลาด ให้เปิดผ่านลิงก์ https:// ของ GitHub Pages แทน เช่น https://ชื่อผู้ใช้.github.io/trca-assessment/tools/check.html</div>
+  <div id="sum" class="sum" role="status" aria-live="polite">กำลังตรวจ…</div>
+
+  <section><h2>1. ไฟล์ครบหรือไม่</h2><ul id="l1"></ul></section>
+  <section><h2>2. การตั้งค่า (config.js)</h2><ul id="l2"></ul></section>
+  <section><h2>3. ข้อคำถาม (js/items.js)</h2><ul id="l3"></ul></section>
+  <section><h2>4. การเชื่อมต่อ Google Apps Script</h2><ul id="l4"></ul></section>
+
+  <p><button id="again" type="button">ตรวจใหม่</button></p>
+  <p class="meta" id="meta"></p>
+</main>
+
+<script>
+const BASE = new URL('../', location.href);
+const ITEMS_VERSION = '3.1.0';          // ต้องตรงกับ ?v= ที่ js/app.js ใช้ import items.js
+const REQUIRED = [
+  ['index.html', 'หน้าแรกของแบบประเมิน', 800],
+  ['config.js', 'ไฟล์ตั้งค่า', 30],
+  ['results.html', 'หน้าตรวจสอบผลภายหลัง', 3000],
+  ['css/style.css', 'สไตล์ของหน้าเว็บ', 3000],
+  ['js/app.js', 'โปรแกรมหลัก', 30000],
+  ['js/items.js', 'คลังข้อคำถาม 68 ข้อ', 100000],
+  ['js/scoring.js', 'การให้คะแนน', 2000],
+  ['tools/export.html', 'เครื่องมือแปลงข้อมูลสำหรับ ConQuest', 5000]
+];
+const OPTIONAL = [['assets/logo-sppo-loei1.jpg', 'ไฟล์โลโก้ (ไม่จำเป็น ตราฝังอยู่ในโปรแกรมแล้ว)']];
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let problems = 0;
+
+function row(list, kind, html, fix) {
+  const li = document.createElement('li');
+  const mark = { ok: '✓', bad: '✗', wait: '…', info: 'i', skip: '–' }[kind];
+  li.innerHTML = `<span class="ic ${kind}">${mark}</span><div class="tx">${html}${fix ? `<div class="fix">${fix}</div>` : ''}</div>`;
+  list.appendChild(li);
+  if (kind === 'bad') problems++;
+  return li;
+}
+
+async function checkFiles() {
+  const list = $('#l1');
+  for (const [path, label, minSize] of REQUIRED) {
+    try {
+      const r = await fetch(new URL(path, BASE), { cache: 'no-store' });
+      if (!r.ok) {
+        row(list, 'bad', `<code>${esc(path)}</code> ${esc(label)}<small>ไม่พบไฟล์ (รหัส ${r.status})</small>`,
+          `ไฟล์นี้ไม่อยู่ในตำแหน่งที่ถูกต้อง เปิด repository ใน GitHub แล้วตรวจว่า <b>${esc(path)}</b> อยู่ในระดับเดียวกับ index.html (ไม่ซ้อนอยู่ในโฟลเดอร์อื่น) ถ้าไม่มี ให้อัปโหลดไฟล์นี้อีกครั้ง`);
+        continue;
+      }
+      const size = (await r.blob()).size;
+      if (size < minSize) {
+        row(list, 'bad', `<code>${esc(path)}</code> ${esc(label)}<small>พบไฟล์ แต่ขนาดเพียง ${size.toLocaleString('th-TH')} ไบต์ เล็กผิดปกติ</small>`,
+          `ไฟล์น่าจะอัปโหลดไม่ครบหรือถูกตัดทอน ให้อัปโหลดไฟล์ <b>${esc(path)}</b> จากชุดไฟล์สมบูรณ์ใหม่อีกครั้ง`);
+      } else {
+        row(list, 'ok', `<code>${esc(path)}</code> ${esc(label)}<small>${size.toLocaleString('th-TH')} ไบต์</small>`);
+      }
+    } catch (e) {
+      row(list, 'bad', `<code>${esc(path)}</code> ${esc(label)}<small>อ่านไฟล์ไม่ได้ (${esc(e.message || e)})</small>`);
+    }
+  }
+  for (const [path, label] of OPTIONAL) {
+    try {
+      const r = await fetch(new URL(path, BASE), { cache: 'no-store' });
+      row(list, r.ok ? 'ok' : 'skip', `<code>${esc(path)}</code> ${esc(label)}<small>${r.ok ? 'พบไฟล์' : 'ไม่พบ ไม่มีผลต่อการทำงาน'}</small>`);
+    } catch (e) { row(list, 'skip', `<code>${esc(path)}</code> ${esc(label)}<small>ไม่พบ ไม่มีผลต่อการทำงาน</small>`); }
+  }
+}
+
+function endpointState() {
+  const cfg = window.TRCA_CONFIG;
+  const list = $('#l2');
+  if (!cfg) {
+    row(list, 'bad', 'อ่าน <code>config.js</code> ไม่ได้ จึงไม่มีค่าตั้งค่า', 'ตรวจข้อ 1 ว่าไฟล์ config.js อยู่ในตำแหน่งเดียวกับ index.html และมีเนื้อหาครบ');
+    return { cfg: null, valid: false };
+  }
+  const ep = String(cfg.endpoint || '').trim();
+  let valid = false;
+  if (!ep) {
+    row(list, 'bad', 'endpoint <small>ยังเว้นว่าง</small>',
+      '<ol><li>เปิดไฟล์ <b>config.js</b> ใน GitHub (คลิกชื่อไฟล์ แล้วกดไอคอนดินสอ)</li><li>วางลิงก์ Web app ของ Apps Script ระหว่างเครื่องหมาย \' \' ที่บรรทัด endpoint</li><li>กด Commit changes แล้วรอ 1–2 นาที จากนั้นกด “ตรวจใหม่”</li></ol>');
+  } else if (/\/dev$/.test(ep)) {
+    row(list, 'bad', `endpoint <small><code>${esc(ep.slice(0, 40))}…${esc(ep.slice(-6))}</code></small>`,
+      'ลิงก์นี้ลงท้ายด้วย <b>/dev</b> ซึ่งใช้ได้เฉพาะเจ้าของสคริปต์ ครูส่งข้อมูลไม่ได้ ให้ใช้ลิงก์ที่ลงท้ายด้วย <b>/exec</b> (Deploy → Manage deployments → คัดลอก Web app URL)');
+  } else if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(ep)) {
+    row(list, 'bad', `endpoint <small><code>${esc(ep.slice(0, 60))}${ep.length > 60 ? '…' : ''}</code></small>`,
+      'รูปแบบลิงก์ไม่ถูกต้อง ต้องเป็น <b>https://script.google.com/macros/s/…/exec</b> ตรวจว่าวางครบ ไม่มีช่องว่างหรือขึ้นบรรทัดใหม่แทรกในลิงก์');
+  } else {
+    valid = true;
+    row(list, 'ok', `endpoint <small><code>${esc(ep.slice(0, 44))}…${esc(ep.slice(-8))}</code></small>`);
+  }
+  row(list, 'info', `revealAnswers = <b>${cfg.revealAnswers === false ? 'false' : 'true'}</b><small>${cfg.revealAnswers === false ? 'ยังไม่แสดงเฉลยหลังส่ง' : 'ครูดูเฉลยและเหตุผลได้หลังส่ง'}</small>`);
+  return { cfg, valid, ep };
+}
+
+async function checkItems() {
+  const list = $('#l3');
+  try {
+    const m = await import(new URL('js/items.js?v=' + ITEMS_VERSION, BASE).href);
+    const I = m.ITEMS, by = d => I.filter(i => i.dim === d).length;
+    const codes = new Set(I.map(i => i.code));
+    const okCount = I.length === 68 && by('K') === 28 && by('S') === 20 && by('A') === 20;
+    row(list, okCount ? 'ok' : 'bad', `จำนวนข้อ ${I.length} (K ${by('K')} · S ${by('S')} · A ${by('A')})`, okCount ? '' : 'ต้องมี 68 ข้อ (K 28, S 20, A 20) ให้อัปโหลด js/items.js จากชุดไฟล์สมบูรณ์ใหม่');
+    const okOpt = I.every(i => i.options && i.options.length === 4 && i.scores && i.scores.length === 4 && i.stem && i.stem.length > 20);
+    row(list, okOpt ? 'ok' : 'bad', 'ทุกข้อมีโจทย์ ตัวเลือก 4 ตัว และเกณฑ์คะแนนครบ', okOpt ? '' : 'พบข้อที่ข้อมูลไม่ครบ ให้อัปโหลด js/items.js ใหม่');
+    row(list, codes.size === 68 ? 'ok' : 'bad', 'รหัสข้อไม่ซ้ำกัน');
+    row(list, 'info', `รุ่นเครื่องมือของเว็บ <b>${esc(m.INSTRUMENT_VERSION)}</b>`);
+    return m.INSTRUMENT_VERSION;
+  } catch (e) {
+    row(list, 'bad', `โหลด <code>js/items.js</code> ไม่ได้<small>${esc(e.message || e)}</small>`, 'ตรวจข้อ 1 ว่าไฟล์อยู่ครบและขนาดปกติ แล้วอัปโหลดใหม่');
+    return null;
+  }
+}
+
+async function checkServer(state, version) {
+  const list = $('#l4');
+  if (!state.valid) { row(list, 'skip', 'ข้ามการตรวจ เพราะยังไม่มีลิงก์ endpoint ที่ใช้ได้ (ดูข้อ 2)'); return; }
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 20000);
+  try {
+    const r = await fetch(state.ep, { cache: 'no-store', signal: ctl.signal });
+    const text = await r.text();
+    let j = null; try { j = JSON.parse(text); } catch (e) { /* ไม่ใช่ JSON */ }
+    if (j && j.ok === true && j.service === 'TRCA') {
+      row(list, 'ok', 'เชื่อมต่อ Google Apps Script ได้ และตอบกลับถูกต้อง');
+      if (j.instrument === version && version) {
+        row(list, 'ok', `Code.gs เป็นรุ่นเดียวกับเว็บ <small>${esc(j.instrument)}</small>`);
+      } else {
+        row(list, 'bad', `Code.gs รุ่น <b>${esc(j.instrument || 'ไม่ระบุ (รุ่นเก่า)')}</b> ไม่ตรงกับเว็บรุ่น <b>${esc(version || '?')}</b>`,
+          '<ol><li>เปิดไฟล์ server/Code.gs ใหม่จากชุดไฟล์สมบูรณ์ คัดลอกทั้งหมดไปวางทับใน Apps Script แล้วกด Save</li><li>Deploy → Manage deployments → ไอคอนดินสอ → Version: <b>New version</b> → Deploy</li><li>กด “ตรวจใหม่”</li></ol>แม้ยังไม่ตรงรุ่น ระบบจะปฏิเสธข้อมูลของครูทุกคนจนกว่าจะแก้');
+      }
+    } else {
+      row(list, 'bad', 'ได้หน้าอื่นที่ไม่ใช่คำตอบจาก Code.gs', 'มักเกิดจากตั้งสิทธิ์ Web app ไม่เป็น <b>Anyone</b> (Deploy → Manage deployments → Who has access = Anyone) หรือโค้ดใน Apps Script ยังไม่ใช่ไฟล์ Code.gs ของระบบนี้');
+    }
+  } catch (e) {
+    const timeout = e && e.name === 'AbortError';
+    row(list, 'bad', timeout ? 'ไม่มีการตอบกลับภายใน 20 วินาที' : 'เบราว์เซอร์เชื่อมต่อไม่ได้ <small>TypeError: Failed to fetch</small>',
+      '<ol><li>ลิงก์ต้องลงท้ายด้วย <b>/exec</b> (ไม่ใช่ /dev) และวางครบทั้งลิงก์</li><li>Deploy → Manage deployments → Who has access ต้องเป็น <b>Anyone</b></li><li>หลังแก้ Code.gs ต้อง Deploy แบบ <b>New version</b> ทุกครั้ง</li><li>ลองเปิดหน้านี้ในหน้าต่าง Incognito/InPrivate เพราะส่วนขยายของเบราว์เซอร์อาจบล็อก</li><li>ทดสอบเปิดลิงก์ endpoint ในแท็บใหม่ ควรเห็นข้อความที่มี "ok":true</li></ol>');
+  } finally { clearTimeout(timer); }
+}
+
+async function run() {
+  problems = 0;
+  ['#l1', '#l2', '#l3', '#l4'].forEach(s => { $(s).innerHTML = ''; });
+  $('#sum').className = 'sum'; $('#sum').textContent = 'กำลังตรวจ…';
+  $('#fileWarn').hidden = location.protocol !== 'file:';
+  await checkFiles();
+  const state = endpointState();
+  const version = await checkItems();
+  await checkServer(state, version);
+  const s = $('#sum');
+  if (problems === 0) { s.className = 'sum ok'; s.textContent = 'ผ่านทุกข้อ ระบบพร้อมเก็บข้อมูล แนะนำให้ทดสอบตอบจนส่งสำเร็จอีกหนึ่งรอบ แล้วลบแถวข้อมูลทดสอบในชีตก่อนแจกครู'; }
+  else { s.className = 'sum bad'; s.textContent = `พบ ${problems} ประเด็นที่ต้องแก้ (ดูรายการที่มีเครื่องหมาย ✗ พร้อมวิธีแก้ด้านล่าง)`; }
+  $('#meta').textContent = `ตรวจเมื่อ ${new Date().toLocaleString('th-TH')} · ที่อยู่เว็บ ${BASE.href}`;
+}
+$('#again').onclick = run;
+run();
+</script>
+</body>
+</html>
