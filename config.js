@@ -13,6 +13,6 @@
 //    false = ยังไม่แสดงเฉลย (ใช้ระหว่างเก็บข้อมูล กันเฉลยแพร่ไปถึงผู้ที่ยังไม่ได้ทำ)
 
 window.TRCA_CONFIG = {
-  endpoint: '',
+  endpoint: 'https://script.google.com/macros/s/AKfycbzjXzU2V8uH8BpP1cVgCeIIlO2cQimmsdFDbGqq78IYzOQcjq5L2qLy4YxngUYuiBHFaQ/exec',
   revealAnswers: true
 };
